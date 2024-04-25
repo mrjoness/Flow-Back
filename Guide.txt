@@ -14,7 +14,8 @@ python eval.py --model_path ../jobs/time-batch_adamW_1000-full-fix_L1_m-32_clamp
 # Make a test directory that generated a 'clean' preprocessed folder
 
 
-Running inference on DNA-protein:
+#### Running inference on DNA-protein: ####
+
 - Various command in ./figures/DNA-protein_from-eval
 - Test set contains 55 structures including those from 
 
@@ -32,6 +33,13 @@ cd ./scripts
 # --system provides information about modle
 
 python eval_dna.py --n_gens 5 --check_div --check_bond --model_path ../jobs/time-batch_adamW_dna-clean-no-rev-mis-0_120-500_mmseqs-reidx-valid-fix_L1_m-32_clamp-2.0_attn-0_dim-32_nn-15_depth-6_eps-2001_sigma-0.005_batch-1_CG-noise-0.003_lr-0.001_wdecay-0.0_CGadj--1.0_pos-1_bpack-max_lrdecay-0.0_diff-xt_seed-13 --ckp 600 --mask_prior --load_dir ../sidechainnet_data/DNAPro_seed-13_test --save_dir ../sidechainnet_scores/DNAPro_seed-13_test --system dna-clean-fix-mis-0_120-500
+
+## new run command, uses sig=0.006 by default ##
+python eval_dna.py --n_gens 5 --ckp 750 --mask_prior --load_dir DNAPro_test
+
+## for genesis PWMcos ##
+python eval_dna.py --n_gens 3 --ckp 750 --mask_prior --load_dir PWMcos
+
 
 # TODO
 - include best models in 'models_final' folder and set as default for protein or protein-DNA

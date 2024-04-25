@@ -600,9 +600,8 @@ def get_dna_ohes(top):
 
 
 # backmap to all heavy atoms given only the Ca positions
-
 def parse_dna_3spn(dna_trj, with_pro=False):
-    '''Extract GNN parameters compatible with 3spn2 CG representation of DNA
+    '''Extract GNN parameters compatible with 3sn2 CG representation of DNA
        Ensure that dna_trj only includes dna residues
        If proteins also included in then need to add constant to ohes'''
     
@@ -616,8 +615,23 @@ def parse_dna_3spn(dna_trj, with_pro=False):
 
         cg_trj = dna_trj.atom_slice(cg_idxs)
         dna_trj = dna_trj.atom_slice(aa_idxs)
+        
     except:
         cg_trj = None
+        
+    # get all 5' and 3' residues idxs 
+    ter_res_list = []
+    for chain in dna_trj.topology.chains:
+        residues = list(chain.residues)
+    
+        # Determine the site type for each residue in the chain
+        for index, residue in enumerate(residues):
+            if index == 0:
+                ter_res_list.append(5)
+            elif index == len(residues) - 1:
+                ter_res_list.append(3)
+            else:
+                ter_res_list.append(0)
     
     dna_top = dna_trj.top
     n_resid = dna_top.n_residues
@@ -633,9 +647,21 @@ def parse_dna_3spn(dna_trj, with_pro=False):
 
     for n in range(0, n_resid):
 
-        # assign O3 to the next residue
-        res_idxs = dna_top.select(f"resid {n}")
-
+        # make sure to collect O3 from the previous residue
+        res_idxs = dna_top.select(f'resid {n} and not name "O3\'"')
+        chain_id = dna_top.atom(res_idxs[0]).residue.chain.index
+        
+        # if not a 5' end then include the O3'
+        if ter_res_list[n] != 5:
+            O3_prev = dna_top.select(f'resid {n-1} and name "O3\'"')
+            res_idxs = np.concatenate([res_idxs, O3_prev])
+            
+        # if a 3' end then incldue terminal 03' in mapping but not in com
+        if ter_res_list[n] == 3:
+            O3_curr = dna_top.select(f'resid {n} and name "O3\'"')[0]
+        else:
+            O3_curr = None
+            
         # get names of all atoms in resid
         atom_list = [next(islice(dna_top.atoms, idx, None)).name for idx in res_idxs]
 
@@ -648,41 +674,57 @@ def parse_dna_3spn(dna_trj, with_pro=False):
 
         # passing each res to each chain type
         b_idxs, s_idxs, p_idxs = [], [], []
+        b_names, s_names, p_names = [], [], []
+        
         for idx, name in zip(res_idxs, atom_list):
             
             # need to get exact lists here and verify against 3spn code -- eg 3 
-            if 'P' in name: p_idxs.append(idx)    
-            elif "'" in name: s_idxs.append(idx)
-            else: b_idxs.append(idx)
-
+            if name in ['P', 'OP2', 'OP1', 'O5\'', 'O3\'']:
+                p_idxs.append(idx)
+                p_names.append(name)
+            elif "'" in name: 
+                s_idxs.append(idx)
+                s_names.append(name)
+            else: 
+                b_idxs.append(idx)
+                b_names.append(name)
+                
         # compute center of mass for each
         b_coms = md.compute_center_of_mass(dna_trj.atom_slice(b_idxs)).reshape((n_frames, 1, 3))
         s_coms = md.compute_center_of_mass(dna_trj.atom_slice(s_idxs)).reshape((n_frames, 1, 3))
+        
+        # append terminal 03' after calculating coms (part of mask but not COM)
+        if O3_curr is not None:
+            s_idxs.append(O3_curr)
 
-        xyz_com.append(b_coms)
-        xyz_com.append(s_coms)
-
-        # check if any phosphates in the residue
-        if len(p_idxs) > 0:
-            p_coms = md.compute_center_of_mass(dna_trj.atom_slice(p_idxs)).reshape((n_frames, 1, 3))
+        # check if any phosphates in the residue (don't want to group based on 05' alone)
+        if len(p_idxs) > 1:
+            p_coms = md.compute_center_of_geometry(dna_trj.atom_slice(p_idxs)).reshape((n_frames, 1, 3))
             xyz_com.append(p_coms)
+            xyz_com.append(s_coms)
+            xyz_com.append(b_coms)
             
             # check why not getting any b_idxs -- residue has phosphat but no b or s?
             #print('b s p', len(b_idxs), len(s_idxs), len(p_idxs))
 
             # map to b, s, or p coms
-            aa_to_cg[np.array(b_idxs)] = n_atoms + len(xyz_com) - 4
+            aa_to_cg[np.array(p_idxs)] = n_atoms + len(xyz_com) - 4
             aa_to_cg[np.array(s_idxs)] = n_atoms + len(xyz_com) - 3
-            aa_to_cg[np.array(p_idxs)] = n_atoms + len(xyz_com) - 2
+            aa_to_cg[np.array(b_idxs)] = n_atoms + len(xyz_com) - 2
 
-            cg_atom_list += ['BCOM', 'SCOM', 'PCOM']
+            cg_atom_list += ['PCOM', 'SCOM', 'BCOM']  #['BCOM', 'SCOM', 'PCOM']
             cg_res_list += [res_name]*3
 
         else:
-            aa_to_cg[np.array(b_idxs)] = n_atoms + len(xyz_com) - 3
-            aa_to_cg[np.array(s_idxs)] = n_atoms + len(xyz_com) - 2
+            # map any missing atoms to the sugar
+            xyz_com.append(s_coms)
+            xyz_com.append(b_coms)
+            
+            s_idxs += p_idxs
+            aa_to_cg[np.array(s_idxs)] = n_atoms + len(xyz_com) - 3
+            aa_to_cg[np.array(b_idxs)] = n_atoms + len(xyz_com) - 2
 
-            cg_atom_list += ['BCOM', 'SCOM']
+            cg_atom_list += ['SCOM', 'BCOM'] #['BCOM', 'SCOM']
             cg_res_list += [res_name]*2
 
     # a lot easier to append everything at the end the xyz
@@ -718,7 +760,6 @@ def parse_dna_3spn(dna_trj, with_pro=False):
     
     return xyz_com, mask_idxs, aa_to_cg, res_ohe, all_atom_ohe
 
-# 
 
 # set up alagous protein parse function
 def parse_pro_CA(pro_trj):
