@@ -25,16 +25,18 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--load_dir', default='../sidechainnet_data/DNAPro', type=str, help='Path to input pdbs -- Can be AA or CG')
 parser.add_argument('--save_dir', default='../sidechainnet_scores/DNAPro', type=str, help='Path to input pdbs -- Can be AA or CG')
 parser.add_argument('--CG_noise', default=0.003, type=float, help='Noise profile to use as prior (use training value by default)')
-parser.add_argument('--model_path', default='../jobs/time-batch_adamW_dna-pro-no-rev-100-500-fix_L1_m-32_clamp-2.0_attn-0_dim-32_nn-15_depth-6_eps-2001_sigma-0.01_batch-1_CG-noise-0.003_lr-0.001_wdecay-0.0_CGadj--1.0_pos-1_bpack-max_lrdecay-0.0_diff-xt', type=str, help='Path to the model we want to load')
-parser.add_argument('--ckp', default=500, type=int, help='Checkpoint for given mode')
+parser.add_argument('--model_path', default='../jobs/time-batch_adamW_dna-clean-no-rev-mis-0_120-500_mmseqs-reidx-valid-fix_L1_m-32_clamp-2.0_attn-0_dim-32_nn-15_depth-6_eps-2001_sigma-0.006_batch-1_CG-noise-0.003_lr-0.001_wdecay-0.0_CGadj--1.0_pos-1_bpack-max_lrdecay-0.0_diff-xt_seed-13', type=str, help='Path to the model we want to load')
+
+parser.add_argument('--ckp', default=750, type=int, help='Checkpoint for given mode')
 parser.add_argument('--n_gens', default=1, type=int, help='N generated samples per structure')
 parser.add_argument('--solver', default='euler', type=str, help='Which type of ODE solver to use')
 parser.add_argument('--stride', default='1', type=int, help='Stride to apply to frames of large trajectories')
 parser.add_argument('--check_clash', action='store_true',  help='Calculate clash for each sample')
 parser.add_argument('--check_bonds', action='store_true',  help='Calculate bond quality for each sample')
 parser.add_argument('--check_div', action='store_true',  help='Calculate diversity score (for multi-gen)')
+parser.add_argument('--save_dt', action='store_true',  help='Save intermediate states for visualization')
 parser.add_argument('--mask_prior', action='store_true',  help='Ensure exact match to CG')
-parser.add_argument('--system', default='dna-pro-no-rev-100-500', type=str, help='Dataset this model was trained on -- only need if loading directly from test set')
+parser.add_argument('--system', default='dna-clean-fix-mis-0_120-500', type=str, help='Dataset this model was trained on -- only need if loading directly from test set')
 args = parser.parse_args()
 
 load_dir = args.load_dir
@@ -47,22 +49,30 @@ stride = args.stride
 check_clash = args.check_clash
 check_bonds = args.check_bonds
 check_div = args.check_div
+save_dt = args.save_dt
 mask_prior = args.mask_prior
 system = args.system
+    
+# if using default model save path as 'pretrained'
+save_dir = f'../outputs/{load_dir}'
+load_dir = f'../data/{load_dir}'
+load_dir_clean = f'../data/{load_dir}_clean'
 
-# use updated parsing function if P035 is in system name -- set this to default once confirmed working
-if 'P035' in system or 'clean' in system :
-    from utils_P035 import parse_dna_3spn
-    print('loaded P035 parser')
-else:
-    print('Using default parser')
+clean_inputs = False
+if os.path.exists(load_dir_clean) or clean_inputs:
+    load_dir = load_dir_clean
+
+# add preprocessing to correctly format DNA-pro PDB
+
+# save with model prefix + ckp and noise (simplify naming for final model)
+save_prefix = f'{save_dir}/{model_path.split("/")[-1][15:]}_ckp-{ckp}_noise-{CG_noise}/'
+os.makedirs(save_prefix, exist_ok=True)
     
 # add preprocessing and new save functions
 
 # save with model prefix -- leave off first n chacracters to save space
-save_prefix = f'{args.save_dir}/{model_path.split("/")[-1][15:]}_ckp-{ckp}_noise-{CG_noise}/'
 
-# update name is using mask prior
+# update name if masking prior -- should be default
 if mask_prior:
     save_prefix = save_prefix[:-1] + '_masked/'
     
@@ -141,7 +151,7 @@ def load_features(trj, CG_type='pro-CA'):
     # parse protein graph
     xyz_p, mask_idxs_p, aa_to_cg_p, res_ohe_p, atom_ohe_p = parse_pro_CA(pro_traj)
 
-    # get dna feats -- add residue values to ohes
+    # parse dna graph
     xyz_d, mask_idxs_d, aa_to_cg_d, res_ohe_d, atom_ohe_d = parse_dna_3spn(dna_traj, with_pro=True)
 
     # append protein residues to map and map h
@@ -198,8 +208,8 @@ for trj_name in tqdm(trj_list, desc='Iterating over structures'):
     xyz_ref = xyz[test_idxs]
     print(f'{trj_name.split("/")[-1]}   {n_frames} frames   {top.n_atoms} atoms   {n_gens} samples')
           
-    # ensure input will fit in 16GB VRAM 
-    n_iters = int(len(test_idxs) * len(res_ohe) / 50_000) + 1 # 50_000 worked but not consistently
+    # ensure input will fit in 16GB VRAM -- can optimize this a bit
+    n_iters = int(len(test_idxs) * len(res_ohe) / 50_000) + 1
     idxs_lists = split_list(test_idxs, n_iters)
     print(n_iters, len(idxs_lists))
 
@@ -244,7 +254,7 @@ for trj_name in tqdm(trj_list, desc='Iterating over structures'):
         xyz_gen.append(ode_traj[-1]) 
           
         # save one frame traj that includes the integration over time -- should turn this off to save time
-        if n == 0:
+        if save_dt and n == 0:
             save_name_dt = f'{save_prefix}{trj_name.split("/")[-1]}_dt.pdb'
             xyz_gen_dt = ode_traj[:, -1]
             aa_idxs = top.select(f"not name DS and not name DP and not name DB")
@@ -285,9 +295,13 @@ for trj_name in tqdm(trj_list, desc='Iterating over structures'):
 
     # save gen using same pdb name -- currently saving as n_frames * n_gens
     save_name = f'{save_prefix}{trj_name.split("/")[-1]}'
-    trj_gens.save_pdb(save_name)
+    
+    # save as individual pdbs instead of a single traj
+    #trj_gens.save_pdb(save_name)
+    for i in range(n_gens):
+        save_i = save_name.replace('.pdb', f'_{i+1}.pdb')
+        trj_gens[i*n_frames:(i+1)*n_frames].save_pdb(save_i)
          
-
 # save all scores to same dir
 if check_bonds:
     np.save(f'{save_prefix}bf.npy', np.array(bf_list))
