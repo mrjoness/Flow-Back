@@ -64,18 +64,11 @@ if os.path.exists(load_dir_clean) or clean_inputs:
 
 # add preprocessing to correctly format DNA-pro PDB
 
+
 # save with model prefix + ckp and noise (simplify naming for final model)
 save_prefix = f'{save_dir}/{model_path.split("/")[-1][15:]}_ckp-{ckp}_noise-{CG_noise}/'
-os.makedirs(save_prefix, exist_ok=True)
-    
-# add preprocessing and new save functions
-
-# save with model prefix -- leave off first n chacracters to save space
-
-# update name if masking prior -- should be default
 if mask_prior:
     save_prefix = save_prefix[:-1] + '_masked/'
-    
 os.makedirs(save_prefix, exist_ok=True)
 
 # hyperparameters associateed with model training

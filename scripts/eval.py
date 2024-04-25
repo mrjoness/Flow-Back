@@ -11,15 +11,18 @@ import pickle as pkl
 from tqdm import tqdm
 import time
 
-from sidechainnet.structure.build_info import NUM_COORDS_PER_RES, SC_BUILD_INFO
-from sidechainnet.utils.sequence import ONE_TO_THREE_LETTER_MAP
-THREE_TO_ONE_LETTER_MAP = {y: x for x, y in ONE_TO_THREE_LETTER_MAP.items()}
+# need to test these for preproccessing
+from eval_utils import process_pro_aa, process_pro_cg
 
-ATOM_MAP_14 = {}
-for one_letter in ONE_TO_THREE_LETTER_MAP.keys():
-    ATOM_MAP_14[one_letter] = ["N", "CA", "C", "O"] + list(
-        SC_BUILD_INFO[ONE_TO_THREE_LETTER_MAP[one_letter]]["atom-names"])
-    ATOM_MAP_14[one_letter].extend(["PAD"] * (14 - len(ATOM_MAP_14[one_letter])))
+# from sidechainnet.structure.build_info import NUM_COORDS_PER_RES, SC_BUILD_INFO
+# from sidechainnet.utils.sequence import ONE_TO_THREE_LETTER_MAP
+# THREE_TO_ONE_LETTER_MAP = {y: x for x, y in ONE_TO_THREE_LETTER_MAP.items()}
+
+# ATOM_MAP_14 = {}
+# for one_letter in ONE_TO_THREE_LETTER_MAP.keys():
+#     ATOM_MAP_14[one_letter] = ["N", "CA", "C", "O"] + list(
+#         SC_BUILD_INFO[ONE_TO_THREE_LETTER_MAP[one_letter]]["atom-names"])
+#     ATOM_MAP_14[one_letter].extend(["PAD"] * (14 - len(ATOM_MAP_14[one_letter])))
     
 # looks for dir name in ./data, use 'clean' version if exists
 # create dir with same name in outputs (no clean)
@@ -36,6 +39,8 @@ parser.add_argument('--stride', default='1', type=int, help='Stride to apply to 
 parser.add_argument('--check_clash', action='store_true',  help='Calculate clash for each sample')
 parser.add_argument('--check_bonds', action='store_true',  help='Calculate bond quality for each sample')
 parser.add_argument('--check_div', action='store_true',  help='Calculate diversity score (for multi-gen)')
+parser.add_argument('--mask_prior', action='store_true',  help='Enforce CG positions remain the same')
+parser.add_argument('--retain_AA', action='store_true',  help='Keep AA positions from input for validation (takes longer to process)')
 parser.add_argument('--system', default='1000-full', type=str,  help='Training set used for the model (sets max atoms)')
 args = parser.parse_args()
 
@@ -50,20 +55,22 @@ check_clash = args.check_clash
 check_bonds = args.check_bonds
 check_div = args.check_div
 system = args.system
+mask_prior = args.mask_prior
+retain_AA = args.retain_AA
 
 save_dir = f'../outputs/{load_dir}'
 load_dir = f'../data/{load_dir}'
-load_dir_clean = f'../data/{load_dir}_clean'
 
-clean_inputs = False
-if os.path.exists(load_dir_clean) or clean_inputs:
-    load_dir = load_dir_clean
-
-# add optional preprocessing to save files tet
+# add optional preprocessing to save files -- skip if clean dir exists
+if retain_AA:
+    load_dir = process_pro_aa(load_dir)
+else:
+    load_dir = process_pro_cg(load_dir)
 
 # save with model prefix + ckp and noise (simplify naming for final model)
-#save_prefix = f'{args.save_dir}/{model_path.split("/")[-1]}_ckp-{ckp}_noise-{CG_noise}/'
 save_prefix = f'{save_dir}/{model_path.split("/")[-1]}_ckp-{ckp}_noise-{CG_noise}/'
+if mask_prior:
+    save_prefix = save_prefix[:-1] + '_masked/'
 os.makedirs(save_prefix, exist_ok=True)
 
 # should be loaded in from dict associate with model
@@ -193,9 +200,12 @@ for trj_name in tqdm(trj_list, desc='Iterating over structures'):
                         feats=torch.tensor(np.array(res_test)).int().to(device), 
                         mask=torch.tensor(np.array(mask_test)).bool().to(device).to(device), 
                         atom_feats=torch.tensor(np.array(atom_test)).to(device))
-
+          
         # apply noise -- only masked values need to be filled here
-        xyz_test_prior = get_prior_mix(xyz_test_real, map_test, scale=CG_noise, masks=None)  #mask_test)
+        if mask_prior:
+            xyz_test_prior = get_prior_mix(xyz_test_real, map_test, scale=CG_noise, masks=mask_test)
+        else:
+            xyz_test_prior = get_prior_mix(xyz_test_real, map_test, scale=CG_noise, masks=None)
 
         # select solver (adaptive neural sovleer by default)
         if solver == 'adapt':
