@@ -1,4 +1,4 @@
-name: /scratch/midway2/mikejones/conda_env/torchcfm_11.8
+name: flowback_env
 channels:
   - bioconda
   - conda-forge
