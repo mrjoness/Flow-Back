@@ -12,7 +12,7 @@ import time
 
 # only import what's needed
 #from utils import *   # only import essentias here to reduce time
-from eggn_utils import *
+from egnn_utils import *
 
 # need to test these for preproccessing
 from eval_utils import process_pro_aa, process_pro_cg

@@ -1,17 +1,22 @@
-Running inference on proteins:
-- Use process_pdb_aa or process_pdb_cg from CG_to_AA_0213 (only difference is saving init coords enables direct comparison)
-- ./figures/protein-only_eval
-- Make a 'clean' eval function that uses thet 1000-residue model and automatically preprocesses
-- Also, add a funcion that replaces the flow-matching module so we don't need to rely on that library
+### Running inference on proteins:
 
-Inference on protein CG trajectories: 
-- preprocess to ./sidechainnet_data/CG-pro
-- See ./figures/CG-pro_plots
+# retain AA data -- should test mask vs unmask on diversity
+python eval.py --n_gens 3 --load_dir PDB_test_AA --retain_AA --mask_prior
 
-# Inference line -- get for 1000-full
-python eval.py --model_path ../jobs/time-batch_adamW_1000-full-fix_L1_m-32_clamp-2.0_attn-0_dim-32_nn-15_depth-6_eps-2001_sigma-0.005_batch-1_CG-noise-0.003_lr-0.001_wdecay-0.0_CGadj--1.0_pos-1_bpack-max_lrdecay-0.0_diff-xt --system 1000-full --check_clash --check_bonds --check_div --load_dir ../sidechainnet_data/PDB --n_gens 5 --ckp 10
+# CG only (much faster)
+python eval.py --n_gens 3 --load_dir PDB_test_CG --mask_prior
 
-# Make a test directory that generated a 'clean' preprocessed folder
+# Inference on complete 24-protein test set (try with and without mask prior)
+python eval.py --n_gens 5 --load_dir PDB --mask_prior --CG_noise 0.001
+
+# Slow inference (same as above but retains all positions and checks metrics)
+python eval.py --n_gens 5 --load_dir PDB --retain_AA --check_bonds --check_clash --check_div  --mask_prior
+
+# Inference on DES -- test timing with no stride (2000 frame )
+python eval.py --n_gens 5 --load_dir DES --retain_AA --check_bonds --check_clash --check_div  --mask_prior
+
+# Inference on CA-only trajectory (this includes preprocessing step to expand AA pdb with a stride)
+python eval.py --n_gens 3 --load_dir CG-pro_raw --mask_prior --stride 10
 
 
 #### Running inference on DNA-protein: ####
@@ -39,6 +44,19 @@ python eval_dna.py --n_gens 5 --ckp 750 --mask_prior --load_dir DNAPro_test
 
 ## for genesis PWMcos ##
 python eval_dna.py --n_gens 3 --ckp 750 --mask_prior --load_dir PWMcos
+
+## Env setup instruction
+git clone
+conda create -n flowback python=3.9
+conda activate flowback 
+pip install egnn_pytorch   # automatically installs torch-2.3 + cu12-12 which may not work
+pip install -c conda-forge openmm sidechainnet
+conda install mdtraj matplotlib pandas # running now 
+conda install conda-forge::tqdm
+
+## test with the following
+cd ./scripts
+python eval.py --n_gens 3 --load_dir PDB_test_CG --mask_prior
 
 
 # TODO
