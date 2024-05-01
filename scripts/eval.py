@@ -17,19 +17,6 @@ from egnn_utils import *
 # need to test these for preproccessing
 from eval_utils import process_pro_aa, process_pro_cg
 
-# from sidechainnet.structure.build_info import NUM_COORDS_PER_RES, SC_BUILD_INFO
-# from sidechainnet.utils.sequence import ONE_TO_THREE_LETTER_MAP
-# THREE_TO_ONE_LETTER_MAP = {y: x for x, y in ONE_TO_THREE_LETTER_MAP.items()}
-
-# ATOM_MAP_14 = {}
-# for one_letter in ONE_TO_THREE_LETTER_MAP.keys():
-#     ATOM_MAP_14[one_letter] = ["N", "CA", "C", "O"] + list(
-#         SC_BUILD_INFO[ONE_TO_THREE_LETTER_MAP[one_letter]]["atom-names"])
-#     ATOM_MAP_14[one_letter].extend(["PAD"] * (14 - len(ATOM_MAP_14[one_letter])))
-    
-# looks for dir name in ./data, use 'clean' version if exists
-# create dir with same name in outputs (no clean)
-
 parser = argparse.ArgumentParser()
 parser.add_argument('--load_dir', default='../sidechainnet_data/PDB', type=str, help='Path to input pdbs -- Can be AA or CG')
 parser.add_argument('--save_dir', default='../sidechainnet_scores/PDB', type=str, help='Path to input pdbs -- Can be AA or CG')

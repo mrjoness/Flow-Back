@@ -3,7 +3,6 @@
 import sys, os
 sys.path.append('../')
 
-from utils import *   # only import essentias here to reduce time
 import argparse
 import glob
 import pickle as pkl
@@ -11,15 +10,12 @@ import pickle as pkl
 from tqdm import tqdm
 import time
 
-from sidechainnet.structure.build_info import NUM_COORDS_PER_RES, SC_BUILD_INFO
-from sidechainnet.utils.sequence import ONE_TO_THREE_LETTER_MAP
-THREE_TO_ONE_LETTER_MAP = {y: x for x, y in ONE_TO_THREE_LETTER_MAP.items()}
+# only import what's needed
+#from utils import *   # only import essentias here to reduce time
+from egnn_utils import *
 
-ATOM_MAP_14 = {}
-for one_letter in ONE_TO_THREE_LETTER_MAP.keys():
-    ATOM_MAP_14[one_letter] = ["N", "CA", "C", "O"] + list(
-        SC_BUILD_INFO[ONE_TO_THREE_LETTER_MAP[one_letter]]["atom-names"])
-    ATOM_MAP_14[one_letter].extend(["PAD"] * (14 - len(ATOM_MAP_14[one_letter])))
+# need to test these for preproccessing
+from eval_utils import process_pro_aa, process_pro_cg
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--load_dir', default='../sidechainnet_data/DNAPro', type=str, help='Path to input pdbs -- Can be AA or CG')
