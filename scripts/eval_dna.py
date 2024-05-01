@@ -25,7 +25,6 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--load_dir', default='../sidechainnet_data/DNAPro', type=str, help='Path to input pdbs -- Can be AA or CG')
 parser.add_argument('--save_dir', default='../sidechainnet_scores/DNAPro', type=str, help='Path to input pdbs -- Can be AA or CG')
 parser.add_argument('--CG_noise', default=0.003, type=float, help='Noise profile to use as prior (use training value by default)')
-parser.add_argument('--model_path', default='../jobs/time-batch_adamW_dna-clean-no-rev-mis-0_120-500_mmseqs-reidx-valid-fix_L1_m-32_clamp-2.0_attn-0_dim-32_nn-15_depth-6_eps-2001_sigma-0.006_batch-1_CG-noise-0.003_lr-0.001_wdecay-0.0_CGadj--1.0_pos-1_bpack-max_lrdecay-0.0_diff-xt_seed-13', type=str, help='Path to the model we want to load')
 
 parser.add_argument('--ckp', default=750, type=int, help='Checkpoint for given mode')
 parser.add_argument('--n_gens', default=1, type=int, help='N generated samples per structure')
@@ -37,6 +36,11 @@ parser.add_argument('--check_div', action='store_true',  help='Calculate diversi
 parser.add_argument('--save_dt', action='store_true',  help='Save intermediate states for visualization')
 parser.add_argument('--mask_prior', action='store_true',  help='Ensure exact match to CG')
 parser.add_argument('--system', default='dna-clean-fix-mis-0_120-500', type=str, help='Dataset this model was trained on -- only need if loading directly from test set')
+
+# load model
+#parser.add_argument('--model_path', default='../jobs/time-batch_adamW_dna-clean-no-rev-mis-0_120-500_mmseqs-reidx-valid-fix_L1_m-32_clamp-2.0_attn-0_dim-32_nn-15_depth-6_eps-2001_sigma-0.006_batch-1_CG-noise-0.003_lr-0.001_wdecay-0.0_CGadj--1.0_pos-1_bpack-max_lrdecay-0.0_diff-xt_seed-13', type=str, help='Path to a trained model')
+parser.add_argument('--model_path', default='../models/DNAPro_pretrained', type=str, help='Path to a trained model')
+
 args = parser.parse_args()
 
 load_dir = args.load_dir

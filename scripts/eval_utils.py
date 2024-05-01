@@ -23,14 +23,16 @@ def process_pro_aa(load_dir, stride=1):
     
     save_dir = load_dir + '_clean'
     
-    #if os.exists(save_dir):
-    #    print('Data already cleaned'
-    #    return save_dir
+    # skip straight to inference if 'clean' dir is located
+    if os.path.exists(save_dir):
+        print('Data already cleaned')
+        return save_dir
         
     os.makedirs(save_dir, exist_ok=True)
     pdb_list = glob.glob(f'{load_dir}/*pdb')
     
-    print('Cleaning data -- Only need to do this once\nFaster if not retaining AA positions')
+    print('\nCleaning data -- Only need to do this once')
+    print('\nRetaining atoms... this could be slow')
     for pdb in tqdm.tqdm(pdb_list):
     
         # assume for now aa_trj -- can be CG as welle

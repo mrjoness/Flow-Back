@@ -3,13 +3,16 @@
 import sys, os
 sys.path.append('../')
 
-from utils import *   # only import essentias here to reduce time
 import argparse
 import glob
 import pickle as pkl
 
 from tqdm import tqdm
 import time
+
+# only import what's needed
+#from utils import *   # only import essentias here to reduce time
+from eggn_utils import *
 
 # need to test these for preproccessing
 from eval_utils import process_pro_aa, process_pro_cg
@@ -31,7 +34,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--load_dir', default='../sidechainnet_data/PDB', type=str, help='Path to input pdbs -- Can be AA or CG')
 parser.add_argument('--save_dir', default='../sidechainnet_scores/PDB', type=str, help='Path to input pdbs -- Can be AA or CG')
 parser.add_argument('--CG_noise', default=0.003, type=float, help='Noise profile to use as prior (use training value by default)')
-parser.add_argument('--model_path', default='../jobs/time-batch_adamW_1000-full-fix_L1_m-32_clamp-2.0_attn-0_dim-32_nn-15_depth-6_eps-2001_sigma-0.005_batch-1_CG-noise-0.003_lr-0.001_wdecay-0.0_CGadj--1.0_pos-1_bpack-max_lrdecay-0.0_diff-xt', type=str, help='Path to the model we want to load')
+
 parser.add_argument('--ckp', default=10, type=int, help='Checkpoint for given mode')
 parser.add_argument('--n_gens', default=1, type=int, help='N generated samples per structure')
 parser.add_argument('--solver', default='euler', type=str, help='Which type of ODE solver to use')
@@ -42,6 +45,10 @@ parser.add_argument('--check_div', action='store_true',  help='Calculate diversi
 parser.add_argument('--mask_prior', action='store_true',  help='Enforce CG positions remain the same')
 parser.add_argument('--retain_AA', action='store_true',  help='Keep AA positions from input for validation (takes longer to process)')
 parser.add_argument('--system', default='1000-full', type=str,  help='Training set used for the model (sets max atoms)')
+
+#parser.add_argument('--model_path', default='../jobs/time-batch_adamW_1000-full-fix_L1_m-32_clamp-2.0_attn-0_dim-32_nn-15_depth-6_eps-2001_sigma-0.005_batch-1_CG-noise-0.003_lr-0.001_wdecay-0.0_CGadj--1.0_pos-1_bpack-max_lrdecay-0.0_diff-xt', type=str, help='Path to the model we want to load')
+parser.add_argument('--model_path', default='../models/Pro_pretrained', type=str, help='Path to a trained model')
+
 args = parser.parse_args()
 
 load_dir = args.load_dir
