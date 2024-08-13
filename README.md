@@ -33,6 +33,10 @@ Generates samples using noisier initial distribution to increase diversity
 ```
 python eval.py --n_gens 5 --load_dir PDB_test_CG --mask_prior --CG_noise 0.005
 ```
+Backmapping DNA-protein residues
+```
+python eval_dna.py --n_gens 5 --mask_prior --load_dir DNAPro_test
+```
 
 # Cite as
 ```bibtex
