@@ -20,17 +20,16 @@ python eval.py --n_gens 1 --load_dir PDB_test_CG --mask_prior
 ```
 
 # Inference
-### Generates 5 samples of each CG trace in ./data/PDB_test_CG directory
+
+Generates 5 samples of each CG trace in ./data/PDB_test_CG directory
 ```
 python eval.py --n_gens 5 --load_dir PDB_test_CG --mask_prior
 ```
-
-### Generates samples and computes bond, clash, and diversity score with respect to AA references in ./data/PDB_test_AA
+Generates samples and computes bond, clash, and diversity score with respect to AA references
 ```
 python eval.py --n_gens 5 --load_dir PDB_test_AA --retain_AA --check_bonds --check_clash --check_div  --mask_prior
 ```
-
-### Generates samples using noisier initial distribution to increase diversity
+Generates samples using noisier initial distribution to increase diversity
 ```
 python eval.py --n_gens 5 --load_dir PDB_test_CG --mask_prior --CG_noise 0.005
 ```
