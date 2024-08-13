@@ -105,7 +105,7 @@ class GlobalLinearAttention(nn.Module):
         x = self.ff(x) + x
         return x, queries
 
-
+# adapted from https://github.com/lucidrains/egnn-pytorch with added time conditioning
 class EGNN_Network_time(nn.Module):
     def __init__(
         self,
@@ -328,23 +328,17 @@ def get_prior(xyz, aa_to_cg, mask_idxs=None, scale=1.0, frames=None):
     
     return xyz_prior
 
-def get_prior_mix(xyz, aa_to_cg, masks=None, scale=1.0, frames=None):
-    '''Normally distribute around respective masked coordinates
-       Adapted for time-batching where there is no graph padding'''
+
+def get_prior_mix(xyz, aa_to_cg, mask_idxs=None, scale=1.0, frames=None):
+    '''Normally distribute around respective Ca center of mass'''
     
     # set center of distribution to each CA and use uniform scale
     xyz_prior = []
-    for i, (xyz_ref, map_ref) in enumerate(zip(xyz, aa_to_cg)):
+    
+    for xyz_ref, map_ref in zip(xyz, aa_to_cg):
     
         xyz_ca = xyz_ref[map_ref]
-        xyz_ca = np.random.normal(loc=xyz_ca, scale=scale * np.ones(xyz_ca.shape), size=xyz_ca.shape)
-
-        # ensure masked values are not noised at all
-        if masks is not None:
-            mask = ~masks[i].astype(bool)
-            xyz_ca[mask] = xyz_ref[mask]
-            
-        xyz_prior.append(xyz_ca)
+        xyz_prior.append(np.random.normal(loc=xyz_ca, scale=scale * np.ones(xyz_ca.shape), size=xyz_ca.shape))
     
     return np.array(xyz_prior)
 

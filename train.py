@@ -67,10 +67,9 @@ os.makedirs(job_dir, exist_ok=True)
 
 ### TODO:
 # add only the two final feature sets to git (or probably will need to be in Zenodo)
-# add features to new dir called 'train_features' to keep seperate
 
-'''topology are only needed for validation pdbs, we load these in seperately
-   for protein dataset to save disk space'''
+#topology are only needed for validation pdbs, we load these in seperately for protein dataset to save disk space
+
 if system == 'pro':
     if load_path == 'default':
         load_dict = pkl.load(open('./train_features/feats_pro_0-1000_all_max-8070.pkl', 'rb')) 
@@ -244,8 +243,8 @@ for epoch in range(n_epochs):
             
             # adaptive solver (requires torchdyn)
             if solver == 'adapt':
-                n_ode_steps = 5  # save frequency for visualizing
-                tol = 3e-5       # optimized rtol and atol values 
+                n_ode_steps = 2  
+                tol = 3e-5   
                 node = NeuralODE(model_wrpd, solver="dopri5", sensitivity="adjoint", atol=tol, rtol=tol) 
                 with torch.no_grad():
                     ode_traj = node.trajectory(
