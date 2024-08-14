@@ -21,9 +21,9 @@ def process_pro_aa(load_dir, stride=1):
        Retain xyz position for use as a reference against generated structures
        Should resave pdb + xtc by default'''
     
-    save_dir = load_dir + '_clean'
+    save_dir = load_dir + '_clean_AA'
     
-    # skip straight to inference if 'clean' dir is located
+    # skip straight to inference if data already cleaned
     if os.path.exists(save_dir):
         print('Data already cleaned')
         return save_dir
@@ -98,7 +98,7 @@ def process_pro_aa(load_dir, stride=1):
         trj_aa_fix = md.load('.temp.pdb')
         trj_aa_fix = md.Trajectory(xyz, topology=trj_aa_fix.top)
 
-        # save pdb
+        # save pdb -- save as dcd if longer than
         save_path = pdb.replace(load_dir, save_dir)
         print('save:', save_path)
         trj_aa_fix.save_pdb(save_path)
@@ -111,9 +111,10 @@ def process_pro_cg(load_dir, stride=1):
     
     save_dir = load_dir + '_clean'
     
-    #if os.exists(save_dir):
-    #    print('Data already cleaned'
-    #    return save_dir
+    # skip straight to inference if data already cleaned
+    if os.path.exists(save_dir):
+        print('Data already cleaned')
+        return save_dir
         
     os.makedirs(save_dir, exist_ok=True)
     pdb_list = glob.glob(f'{load_dir}/*pdb')

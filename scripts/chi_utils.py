@@ -137,47 +137,6 @@ def invert_chirality(traj, chi):
 
     return traj
 
-def invert_chirality_CB_only(traj, chi):
-    """
-    This flips the CB only, which minimizes changes to sidechain and likely reduces clashes,
-    but likely produces unphysical CB-sidechain angles
-    """
-    
-    for frame_index in range(traj.n_frames):
-        res_list = np.where(chi[frame_index] > 0.001)[0]
-    
-        for residue_index in res_list:
-
-            # Get the specific residue
-            residue = traj.topology.residue(residue_index)
-
-            # Identify the atoms in the chiral center (N, CA, C, CB)
-            try:
-                n_idx = residue.atom('N').index
-                ca_idx = residue.atom('CA').index
-                c_idx = residue.atom('C').index
-                cb_idx = residue.atom('CB').index
-            except KeyError:
-                print(f"Residue {residue_index} does not have the required atoms for chirality inversion.")
-                continue
-
-            # Get the coordinates of the chiral center atoms
-            n = traj.xyz[frame_index, n_idx]
-            ca = traj.xyz[frame_index, ca_idx]
-            c = traj.xyz[frame_index, c_idx]
-            cb = traj.xyz[frame_index, cb_idx]
-
-            # Calculate the normal vector to the plane defined by N, CA, and C
-            normal_vector = np.cross(n - ca, c - ca)
-            normal_vector = normal_vector / np.linalg.norm(normal_vector)  # Normalize the vector
-
-            # Reflect the CB atom through the plane defined by N, CA, and C
-            cb_reflected = cb - 2 * np.dot(cb - ca, normal_vector) * normal_vector
-
-            # Update the coordinates of the CB atom in the trajectory
-            traj.xyz[frame_index, cb_idx] = cb_reflected
-
-    return traj
 
 def invert_chirality_reflection(traj, chi):
     """
@@ -308,7 +267,7 @@ def invert_chirality_reflection_ter(traj, chi):
     return traj
 
 
-def euler_integrator_chi_check(model, x, nsteps=100, x0_diff=False, t_flip=1.01, top_ref=None, keep_flip=False, type_flip='rot'):
+def euler_integrator_chi_check(model, x, nsteps=100, x0_diff=False, t_flip=1.01, top_ref=None, keep_flip=False, type_flip='ref-ter'):
     
     # try adding small amounts of noise during integration
     
