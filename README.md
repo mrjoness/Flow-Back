@@ -39,11 +39,11 @@ python eval.py --n_gens 3 --load_dir pro_traj_example --mask_prior
 ```
 Backmap DNA-protein residues --ckp 750 is recommended
 ```
-eval.py --n_gens 5 --system DNApro --load_dir DNApro_example --model_path ../models/DNAPro_pretrained --ckp 750 --mask_prior --retain_AA --check_bonds 
+eval.py --n_gens 5 --system DNApro --load_dir DNApro_example --model_path ../models/DNAPro_pretrained --ckp 750 --mask_prior --retain_AA
 ```
 Backmapping DNA-protein CG trajectory
 ```
-TODO
+eval.py --n_gens 3 --system DNApro --load_dir DNApro_traj_example --model_path ../models/DNAPro_pretrained --ckp 750 --mask_prior
 ```
 
 # Cite as
