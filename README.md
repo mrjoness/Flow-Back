@@ -16,26 +16,26 @@ conda install conda-forge::tqdm
 ### Testing:
 ```
 cd ./scripts
-python eval.py --n_gens 1 --load_dir PDB_test_CG --mask_prior
+python eval.py --n_gens 1 --load_dir PDB_example --mask_prior
 ```
 
 # Inference
 
 Generates 5 samples of each CG trace in ./data/PDB_test_CG directory
 ```
-python eval.py --n_gens 5 --load_dir PDB_test_CG --mask_prior
+python eval.py --n_gens 5 --load_dir PDB_example --mask_prior
 ```
 Generates samples and computes bond, clash, and diversity score with respect to AA references
 ```
-python eval.py --n_gens 5 --load_dir PDB_test_AA --retain_AA --check_bonds --check_clash --check_div  --mask_prior
+python eval.py --n_gens 5 --load_dir PDB_example --retain_AA --check_bonds --check_clash --check_div  --mask_prior
 ```
 Generates samples using noisier initial distribution to increase diversity
 ```
-python eval.py --n_gens 5 --load_dir PDB_test_CG --mask_prior --CG_noise 0.005
+python eval.py --n_gens 5 --load_dir PDB_example --mask_prior --CG_noise 0.005
 ```
 Backmapping DNA-protein residues
 ```
-python eval_dna.py --n_gens 5 --mask_prior --load_dir DNAPro_test
+python eval_dna.py --n_gens 5 --mask_prior --load_dir DNAPro_example
 ```
 
 # Cite as
