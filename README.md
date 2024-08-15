@@ -29,13 +29,21 @@ Generates samples and computes bond, clash, and diversity score with respect to 
 ```
 python eval.py --n_gens 5 --load_dir PDB_example --retain_AA --check_bonds --check_clash --check_div  --mask_prior
 ```
-Generates samples using noisier initial distribution to increase diversity
+Backmap samples using noisier initial distribution to increase diversity
 ```
 python eval.py --n_gens 5 --load_dir PDB_example --mask_prior --CG_noise 0.005
 ```
-Backmapping DNA-protein residues
+Backmap short (10 frame) CG trajectory containing only C-alphas atoms
 ```
-python eval_dna.py --n_gens 5 --mask_prior --load_dir DNAPro_example
+TODO
+```
+Backmap DNA-protein residues --ckp 750 is recommended
+```
+eval.py --n_gens 5 --system DNApro --load_dir DNApro_example --model_path ../models/DNAPro_pretrained --ckp 750 --mask_prior --retain_AA --check_bonds 
+```
+Backmapping DNA-protein CG trajectory
+```
+TODO
 ```
 
 # Cite as

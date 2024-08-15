@@ -2,11 +2,11 @@
 
 import sys, os
 sys.path.append('../')
+sys.path.append('./utils/')
 
 import argparse
 import glob
 import pickle as pkl
-
 from tqdm import tqdm
 import time
 import datetime
@@ -16,7 +16,7 @@ import datetime
 from egnn_utils import *
 
 # need to test these for preproccessing
-from eval_utils import process_pro_aa, process_pro_cg
+from eval_utils import process_pro_aa, process_pro_cg, load_model, load_features_pro, load_features_DNApro, split_list
 
 # import functions to check and correct chirality
 from chi_utils import *
@@ -36,13 +36,13 @@ parser.add_argument('--retain_AA', action='store_true',  help='Hold AA positions
 parser.add_argument('--model_path', default='../models/Pro_pretrained', type=str, help='Trained model')
 parser.add_argument('--tolerance', default=3e-5, type=float, help='Tolerance if using NN solver')
 parser.add_argument('--nsteps', default=100, type=int, help='Number of steps in Euler integrator')
+parser.add_argument('--system', default='pro', type=str, help='Pro or DNAPro CG input')
 
 # for enantiomer correction
 parser.add_argument('--t_flip', default=0.2, type=float,  help='ODE time to correct fo D-residues')
 parser.add_argument('--type_flip', type=str, default='ref-ter', help='Method used to fix chirality')
 
 args = parser.parse_args()
-
 load_dir = args.load_dir
 CG_noise = args.CG_noise
 model_path = args.model_path
@@ -59,15 +59,10 @@ tol = args.tolerance
 nsteps = args.nsteps
 t_flip = args.t_flip
 type_flip = args.type_flip
+system = args.system
 
 save_dir = f'../outputs/{load_dir}'
 load_dir = f'../data/{load_dir}'
-
-# add optional preprocessing to save files -- skip if clean dir exists
-if retain_AA:
-    load_dir = process_pro_aa(load_dir)
-else:
-    load_dir = process_pro_cg(load_dir)
 
 # remove mask and nsteps to simplify naming
 if solver == 'euler':
@@ -83,71 +78,28 @@ os.makedirs(save_prefix, exist_ok=True)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# optionally add these functions to eval_utils
-def load_model(model_path, ckp, device):
-    '''Load model from a given path to device'''
-    
-    # load hyperparams associated with specific model
-    model_params = pkl.load(open(f'{model_path}/params.pkl', 'rb')) 
 
-    model = EGNN_Network_time(
-        num_tokens = model_params['res_dim'],
-        atom_dim = model_params['atom_dim'],
-        num_positions = model_params['max_atoms'],
-        dim = model_params['dim'],               
-        depth = model_params['depth'],
-        num_nearest_neighbors = model_params['num_nearest_neighbors'],
-        global_linear_attn_every = 0,
-        coor_weights_clamp_value = 2.,  
-        m_dim=model_params['mdim'],
-        fourier_features = 4, 
-        time_dim=0,
-        res_dim=model_params['res_dim'],
-        
-    ).to(device)
-
-    # load model 
-    state_dict_path = f'{model_path}/state-{ckp}.pth' 
-    model.load_state_dict(torch.load(state_dict_path))
-
-    return model
-
-def load_features(trj, CG_type='pro-CA'):
-    '''Converts trj with a single topology to features
-       Can substitue different masks for other CG representations'''
-    
-    top = trj.top
-    n_atoms = trj.n_atoms
-    
-    # get ohes
-    res_ohe, atom_ohe, allatom_ohe = get_pro_ohes(top)
-    mask_idxs = top.select('name CA')
-    aa_to_cg = get_aa_to_cg(top, mask_idxs)
-    xyz = trj.xyz
-    
-    # convert mask idxs to bool of feature size
-    mask = np.ones(len(res_ohe))
-    mask[mask_idxs] = 0
-
-    return res_ohe, allatom_ohe, xyz, aa_to_cg, mask, n_atoms, top
-
-def split_list(lst, n):
-    """Splits a list into n approximately equal parts"""
-    k, m = divmod(len(lst), n)
-    return [lst[i*k + min(i, m):(i+1)*k + min(i+1, m)] for i in range(n)]
+# add optional preprocessing to save files -- skip if already cleaned
+if system == 'Pro':
+    if retain_AA:
+        load_dir = process_pro_aa(load_dir)
+    else:
+        load_dir = process_pro_cg(load_dir)
+elif system == 'DNAPro':
+    pass #load_dir = load_dir
+else:
+    print('Invalid system type')
 
 # load model
 model = load_model(model_path, ckp, device)
 
-# Track scores -- track each score
-# Can only calculate bonds and div if an AA reference is provided 
-# Can only calculate div if there are multiple generated structures
+# Track scores
 bf_list, clash_list, div_list = [], [], []
 
 # save time for inference as a function of size -- over n-res?
 time_list, res_list = [], []
 
-trj_list = glob.glob(f'{load_dir}/*')
+trj_list = sorted(glob.glob(f'{load_dir}/*'))
 print(f'Found {len(trj_list)} trajs to backmap')
 
 for trj_name in tqdm(trj_list, desc='Iterating over trajs'):
@@ -156,19 +108,26 @@ for trj_name in tqdm(trj_list, desc='Iterating over trajs'):
     n_frames = trj.n_frames
     start_time = datetime.datetime.now()
 
-    # load features for the given topology
-    res_ohe, atom_ohe, xyz, aa_to_cg, mask, n_atoms, top = load_features(trj)
+    # load features for the given topology and system type
+    if system=='pro':
+        res_ohe, atom_ohe, xyz, aa_to_cg, mask, n_atoms, top = load_features_pro(trj)
+    elif system=='DNApro':
+        res_ohe, atom_ohe, xyz, aa_to_cg, mask, n_atoms, top = load_features_DNApro(trj)
+    else:
+        print('Invalid system type')
+        
+    print(len(res_ohe), n_atoms)
+    
     test_idxs = list(np.arange(n_frames))*n_gens
     xyz_ref = xyz[test_idxs]
     print(f'{trj_name.split("/")[-1]}   {n_frames} frames   {n_atoms} atoms   {n_gens} samples')
 
     # ensure input will fit in 16GB VRAM 
-    n_iters = int(len(test_idxs) * len(res_ohe) / 100_000) + 1
+    n_iters = int(len(test_idxs) * len(res_ohe) / 80_000) + 1
     idxs_lists = split_list(test_idxs, n_iters)
     print(n_iters, len(idxs_lists))
           
     xyz_gen = []
-          
     for n, test_idxs in enumerate(idxs_lists):
         n_test = len(test_idxs)
         print(f'iter {n+1} / {n_iters}')
@@ -226,23 +185,27 @@ for trj_name in tqdm(trj_list, desc='Iterating over trajs'):
     xyz_gen = np.concatenate(xyz_gen)
 
     # still using original top
-    trj_gens = md.Trajectory(xyz_gen, top)
-    trj_refs = md.Trajectory(xyz_ref, top)
+    #trj_gens = md.Trajectory(xyz_gen, top)
+    #trj_refs = md.Trajectory(xyz_ref, top)
+          
+    # don't include DNA virtual atoms in top 
+    aa_idxs = top.select(f"not name DS and not name DP and not name DB")
+    trj_gens = md.Trajectory(xyz_gen[:, :top.n_atoms], top).atom_slice(aa_idxs)
+    trj_refs = md.Trajectory(xyz_ref[:, :top.n_atoms], top).atom_slice(aa_idxs)
 
-    # calculate scores
+    # Can only calculate bonds and div if an AA reference is provided
     if check_bonds:
         bf = [bond_fraction(t_ref, t_gen) for t_gen, t_ref in zip(trj_gens, trj_refs)]
         bf = np.array(bf).reshape(n_frames, n_gens)
         bf_list.append(bf)
-        print('bf', np.mean(bf))
           
+    # protein only clash only for now
     if check_clash:
         clash = [clash_res_percent(t_gen) for t_gen in trj_gens]
         clash = np.array(clash).reshape(n_frames, n_gens)
         clash_list.append(clash)
-        print('cls', np.mean(clash))
           
-    # calculate one div per frame
+    # Need multiple gens to calcualte diversity
     if check_div:
         div_frames = []
         for f in range(n_frames):
@@ -262,6 +225,7 @@ for trj_name in tqdm(trj_list, desc='Iterating over trajs'):
 # save all scores to same dir
 if check_bonds:
     np.save(f'{save_prefix}bf.npy', np.array(bf_list))
+    print('mean bf: ', np.mean(bf_list))
 if check_clash:
     np.save(f'{save_prefix}cls.npy', np.array(clash_list)) 
 if check_div:
