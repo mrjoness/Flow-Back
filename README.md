@@ -35,7 +35,7 @@ python eval.py --n_gens 5 --load_dir PDB_example --mask_prior --CG_noise 0.005
 ```
 Backmap short (10 frame) CG trajectory containing only C-alphas atoms
 ```
-TODO
+python eval.py --n_gens 3 --load_dir pro_traj_example --mask_prior
 ```
 Backmap DNA-protein residues --ckp 750 is recommended
 ```
