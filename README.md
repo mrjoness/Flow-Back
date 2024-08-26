@@ -46,6 +46,34 @@ Backmapping DNA-protein CG trajectory
 eval.py --n_gens 3 --system DNApro --load_dir DNApro_traj_example --model_path ../models/DNAPro_pretrained --ckp 750 --mask_prior
 ```
 
+# Training
+
+Download training pdbs and pre-processed features from https://zenodo.org/records/13375392.
+
+### Re-train using default parameters
+
+Unzip and move train_features directory in working directory.
+
+Train protein model using default parameters:
+
+```
+python train.py --system pro --load_path ./train_features/feats_pro_0-1000_all_max-8070.pkl
+```
+
+Train DNA-protein model:
+
+```
+python train.py --system DNApro --load_path ./train_features/feats_DNAPro_DNA-range_10-120_pro-range_10-500.pkl'
+```
+
+### Re-train with new PDBs
+
+```
+cd scripts
+python featurize_pro.py --pdb_dir ../train_PDBs/ --save_name pro-train
+```
+
+
 # Cite as
 ```bibtex
 @inproceedings{jones24flowback,
