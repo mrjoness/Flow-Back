@@ -1,41 +1,28 @@
-import math
-import os
-import time
 
-import matplotlib.pyplot as plt
+import os
+import matplotlib.pyplot as plt  # removing this thows scipy.optimize gcc error
 import numpy as np
 import torch
-import torchdyn
-from torchdyn.core import NeuralODE
-
+#import torchdyn
+#from torchdyn.core import NeuralODE
 from Bio.PDB import PDBParser, PDBIO, Select
-
-from torchcfm.conditional_flow_matching import *
-
-# these shoudn't be needed without OT and allocate gpu mem
-#import ot as pot
-#from torchcfm.models.models import *
-#from torchcfm.utils import *
-
+#from torchcfm.conditional_flow_matching import *
 import mdtraj as md
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
-import matplotlib.pyplot as plt
-
 from torch import nn, einsum, broadcast_tensors
 import torch.nn.functional as F
-
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
-
 from itertools import islice, count
 
-#from egnn_pytorch import EGNN_Network, EGNN
 try:
-    from egnn_pytorch_fp16 import EGNN_Network, EGNN
-    print('using fp16')
+    from egnn_pytorch_se3.egnn_pytorch import EGNN_SE3 as EGNN
+    print('using egnn_pytorch SE3')
+    
 except:
-    from egnn_pytorch import EGNN_Network, EGNN
+    from egnn_pytorch import EGNN
+    print('using egnn_pytorch standard')
 
 def exists(val):
     return val is not None
@@ -340,7 +327,7 @@ def get_prior_mix(xyz, aa_to_cg, mask_idxs=None, scale=1.0, frames=None):
         xyz_ca = xyz_ref[map_ref]
         xyz_prior.append(np.random.normal(loc=xyz_ca, scale=scale * np.ones(xyz_ca.shape), size=xyz_ca.shape))
     
-    return np.array(xyz_prior)
+    return xyz_prior #np.array(xyz_prior, dtype=object)  # fix ragged nest warning
 
     
 def str_to_ohe(string_list):
@@ -895,7 +882,6 @@ def clash_res_percent(viz_gen, thresh=0.12, Ca_cut=2.0):
     
     
 # for calculating generative diversity
-
 def ref_rmsd(trj_ref, trj_sample_list):
     
     rmsd_list = []
