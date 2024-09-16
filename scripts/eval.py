@@ -11,12 +11,8 @@ from tqdm import tqdm
 import time
 import datetime
 
-# only import what's needed
-#from utils import *   # only import essentias here to reduce time
-from egnn_utils import *
-
 # need to test these for preproccessing
-from eval_utils import process_pro_aa, process_pro_cg, load_model, load_features_pro, load_features_DNApro, split_list
+from eval_utils import * #process_pro_aa, process_pro_cg, load_model, load_features_pro, load_features_DNApro, split_list
 
 # import functions to check and correct chirality
 from chi_utils import *
@@ -37,6 +33,7 @@ parser.add_argument('--model_path', default='../models/Pro_pretrained', type=str
 parser.add_argument('--tolerance', default=3e-5, type=float, help='Tolerance if using NN solver')
 parser.add_argument('--nsteps', default=100, type=int, help='Number of steps in Euler integrator')
 parser.add_argument('--system', default='pro', type=str, help='Pro or DNAPro CG input')
+parser.add_argument('--vram', default=16, type=int, help='Scale batch size to fit max gpu VRAM')
 
 # for enantiomer correction
 parser.add_argument('--t_flip', default=0.2, type=float,  help='ODE time to correct fo D-residues')
@@ -60,6 +57,7 @@ nsteps = args.nsteps
 t_flip = args.t_flip
 type_flip = args.type_flip
 system = args.system
+vram = args.vram
 
 save_dir = f'../outputs/{load_dir}'
 load_dir = f'../data/{load_dir}'
@@ -77,16 +75,24 @@ if mask_prior:
 os.makedirs(save_prefix, exist_ok=True)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+print(device)
 
 # add optional preprocessing to save files -- skip if already cleaned
-if system == 'Pro':
+if system == 'pro':
     if retain_AA:
         load_dir = process_pro_aa(load_dir)
     else:
         load_dir = process_pro_cg(load_dir)
-elif system == 'DNAPro':
-    pass #load_dir = load_dir
+elif system == 'DNApro':
+    if retain_AA:
+        # accounted for in featurization
+        pass
+    else:
+        pass
+        # either combine standard order with protein function (for aa and cg)
+        # or call each seperately and recombine (keep pro-DNA order consistent)
+        #load_dir = process_DNApro_cg(load_dir)
+        
 else:
     print('Invalid system type')
 
@@ -115,17 +121,15 @@ for trj_name in tqdm(trj_list, desc='Iterating over trajs'):
         res_ohe, atom_ohe, xyz, aa_to_cg, mask, n_atoms, top = load_features_DNApro(trj)
     else:
         print('Invalid system type')
-        
-    print(len(res_ohe), n_atoms)
-    
+
     test_idxs = list(np.arange(n_frames))*n_gens
     xyz_ref = xyz[test_idxs]
     print(f'{trj_name.split("/")[-1]}   {n_frames} frames   {n_atoms} atoms   {n_gens} samples')
 
     # ensure input will fit in 16GB VRAM 
-    n_iters = int(len(test_idxs) * len(res_ohe) / 80_000) + 1
+    n_iters = int(len(test_idxs) * len(res_ohe) / (vram*6_000)) + 1
     idxs_lists = split_list(test_idxs, n_iters)
-    print(n_iters, len(idxs_lists))
+    print(f'breaking up into {n_iters} batches:\n')
           
     xyz_gen = []
     for n, test_idxs in enumerate(idxs_lists):
@@ -205,7 +209,7 @@ for trj_name in tqdm(trj_list, desc='Iterating over trajs'):
         clash = np.array(clash).reshape(n_frames, n_gens)
         clash_list.append(clash)
           
-    # Need multiple gens to calcualte diversity
+    # Need multiple gens to calculate diversity
     if check_div:
         div_frames = []
         for f in range(n_frames):
@@ -228,8 +232,10 @@ if check_bonds:
     print('mean bf: ', np.mean(bf_list))
 if check_clash:
     np.save(f'{save_prefix}cls.npy', np.array(clash_list)) 
+    print('mean cls: ', np.mean(clash_list))
 if check_div:
     np.save(f'{save_prefix}div.npy', np.array(div_list)) 
+    print('mean div: ', np.mean(div_list))
           
 # save ordered list of trajs
 with open(f'{save_prefix}trj_list.pkl', "wb") as output_file:
