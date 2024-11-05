@@ -15,14 +15,17 @@ import torch.nn.functional as F
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
 from itertools import islice, count
+import math
 
-try:
-    from egnn_pytorch_se3.egnn_pytorch import EGNN_SE3 as EGNN
-    print('using egnn_pytorch SE3')
+#try:
+from egnn_pytorch_se3.egnn_pytorch import EGNN_SE3, EGNN
+se3_avail = True
+print('using egnn_pytorch SE3')
     
-except:
-    from egnn_pytorch import EGNN
-    print('using egnn_pytorch standard')
+# except:
+#     from egnn_pytorch import EGNN
+#     se3_avail = False
+#     print('using egnn_pytorch standard')
 
 def exists(val):
     return val is not None
@@ -91,6 +94,20 @@ class GlobalLinearAttention(nn.Module):
 
         x = self.ff(x) + x
         return x, queries
+    
+def generate_cos_pos_encoding(n, dim, device, scale=10000.0):
+    '''MJ -- replace pos_emb with sin/cos'''
+
+    assert dim % 2 == 0, "dim must be even for alternating sin/cos encoding"
+    
+    pos_enc = torch.zeros(n, dim, device=device)
+    position = torch.arange(0, n, dtype=torch.float, device=device).unsqueeze(1)
+    div_term = torch.exp(torch.arange(0, dim, 2, device=device).float() * (-math.log(scale) / dim))
+    
+    pos_enc[:, 0::2] = torch.sin(position * div_term)
+    pos_enc[:, 1::2] = torch.cos(position * div_term)
+
+    return pos_enc
 
 # adapted from https://github.com/lucidrains/egnn-pytorch with added time conditioning
 class EGNN_Network_time(nn.Module):
@@ -102,6 +119,7 @@ class EGNN_Network_time(nn.Module):
         num_tokens = None,
         num_edge_tokens = None,
         num_positions = None,
+        emb_cos_scale = None,
         edge_dim = 0,
         num_adj_degrees = None,
         adj_dim = 0,
@@ -112,11 +130,13 @@ class EGNN_Network_time(nn.Module):
         time_dim=0, 
         res_dim=20,  # change to 21
         atom_dim=3,  # change to 5
-        **kwargs
+        sym='e3',
+        **kwargs    # MJ -- include seq_features, and seq_decay in kwargs
     ):
         super().__init__()
         assert not (exists(num_adj_degrees) and num_adj_degrees < 1), 'make sure adjacent degrees is greater than 1'
         self.num_positions = num_positions
+        self.emb_cos_scale = emb_cos_scale
         
         self.res_emb = nn.Embedding(res_dim, dim)
         self.atom_emb = nn.Embedding(atom_dim, dim)
@@ -142,11 +162,18 @@ class EGNN_Network_time(nn.Module):
         for ind in range(depth):
             is_global_layer = has_global_attn and (ind % global_linear_attn_every) == 0
 
-            self.layers.append(nn.ModuleList([
-                GlobalLinearAttention(dim = dim, heads = global_linear_attn_heads, dim_head = global_linear_attn_dim_head) if is_global_layer else None,
-                EGNN(dim = dim, edge_dim = (edge_dim + adj_dim), norm_feats = True, **kwargs),
-            ]))
-            
+            if sym=='e3':
+                self.layers.append(nn.ModuleList([
+                    GlobalLinearAttention(dim = dim, heads = global_linear_attn_heads, dim_head = global_linear_attn_dim_head) if is_global_layer else None,
+                    EGNN(dim = dim, edge_dim = (edge_dim + adj_dim), norm_feats = True, **kwargs),
+                ]))
+                
+            elif sym=='se3' and se3_avail:
+                self.layers.append(nn.ModuleList([
+                    GlobalLinearAttention(dim = dim, heads = global_linear_attn_heads, dim_head = global_linear_attn_dim_head) if is_global_layer else None,
+                    EGNN_SE3(dim = dim, edge_dim = (edge_dim + adj_dim), norm_feats = True, **kwargs),
+                ]))
+
         # MJ -- add an MLP to encode time
         self.time_dim = time_dim
         if self.time_dim > 0:
@@ -157,6 +184,8 @@ class EGNN_Network_time(nn.Module):
                 torch.nn.SELU(),
                 torch.nn.Linear(self.time_dim, dim),
             )
+    
+        #self.generate_cos_pos_encoding = generate_cos_pos_encoding
 
     def forward(self, x):
         return self.net(x)
@@ -177,20 +206,25 @@ class EGNN_Network_time(nn.Module):
         if exists(self.token_emb):
             feats = self.token_emb(feats)
         
-        # embed residue and atom type and add
-        #feats_emb = self.res_emb(feats[:, :, 0])
-        #feats_emb += self.atom_emb(feats[:, :, 1])
-        
         if atom_feats != None:
             feats += self.atom_emb(atom_feats)
-            
-        #print('feats', feats.shape, feats[0, :5, :])
 
         if exists(self.pos_emb):
             n = feats.shape[1]
             assert n <= self.num_positions, f'given sequence length {n} must be less than the number of positions {self.num_positions} set at init'
             pos_emb = self.pos_emb(torch.arange(n, device = device))
             feats += rearrange(pos_emb, 'n d -> () n d')
+
+        # don't use both the linear and cos embeddings
+        elif exists(self.emb_cos_scale):
+            n, dim = feats.shape[1], feats.shape[2]
+            pos_emb_cos = generate_cos_pos_encoding(n, dim, device=device, scale=self.emb_cos_scale)
+            feats += rearrange(pos_emb_cos, 'n d -> () n d')
+            
+        else:
+            pass
+            #print('No absolute pos encoding')
+          
 
         # if time passed as single float or dim 0 tensor
         if isinstance(time, float) or time.dim()==0:
@@ -316,7 +350,7 @@ def get_prior(xyz, aa_to_cg, mask_idxs=None, scale=1.0, frames=None):
     return xyz_prior
 
 
-def get_prior_mix(xyz, aa_to_cg, mask_idxs=None, scale=1.0, frames=None):
+def get_prior_mix(xyz, aa_to_cg, scale=1.0):
     '''Normally distribute around respective Ca center of mass'''
     
     # set center of distribution to each CA and use uniform scale
@@ -328,6 +362,25 @@ def get_prior_mix(xyz, aa_to_cg, mask_idxs=None, scale=1.0, frames=None):
         xyz_prior.append(np.random.normal(loc=xyz_ca, scale=scale * np.ones(xyz_ca.shape), size=xyz_ca.shape))
     
     return xyz_prior #np.array(xyz_prior, dtype=object)  # fix ragged nest warning
+
+def get_prior_mask(xyz, aa_to_cg, masks=None, scale=1.0):
+    '''Normally distribute around respective masked coordinates
+       Optionally mask out CG values so they are identical in CG and AA traces'''
+    
+    # set center of distribution to each CA and use uniform scale
+    xyz_prior = []
+    for i, (xyz_ref, map_ref) in enumerate(zip(xyz, aa_to_cg)):
+    
+        xyz_ca = xyz_ref[map_ref]
+        xyz_ca = np.random.normal(loc=xyz_ca, scale=scale * np.ones(xyz_ca.shape), size=xyz_ca.shape)
+
+        # ensure masked values are not noised at all
+        if masks is not None:
+            mask = ~masks[i].astype(bool)
+            xyz_ca[mask] = xyz_ref[mask]
+        xyz_prior.append(xyz_ca)
+    
+    return xyz_prior
 
     
 def str_to_ohe(string_list):

@@ -1,10 +1,9 @@
 from utils import *
 from conditional_flow_matching import ConditionalFlowMatcher
 import argparse
-import time
-import glob
 import pickle as pkl
 from torch.optim.lr_scheduler import StepLR
+import torch.nn.utils as nn_utils
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--fmsigma', default=0.005, type=float, help='Epsilon during FM training')
@@ -29,8 +28,18 @@ parser.add_argument('--CGadj', default=0.0, type=float, help='Whether to load a 
 parser.add_argument('--pos', default=1, type=int, help='Set to 1 is using positional encoding')
 parser.add_argument('--solver', default='euler', type=str, help='Type of solver to use (adaptive by default)')
 parser.add_argument('--diff_type', default='xt', type=str, help='Find vt by subtracting noised or unnoised')
-parser.add_argument('--load_path', default='default', type=str, help='Find vt by subtracting noised or unnoised')
-parser.add_argument('--top_path', default='default', type=str, help='Find vt by subtracting noised or unnoised')
+parser.add_argument('--load_path', default='default', type=str, help='Where to load structures')
+parser.add_argument('--top_path', default='default', type=str, help='Where to load topologies (for validation set)')
+
+# add for cross-symmetry comparison
+parser.add_argument('--sym', default='e3', type=str, help='Type of group symmetry')
+parser.add_argument('--sym_rep', default=1, type=int, help='Reps of different symmetries')
+parser.add_argument('--mask_prior', action='store_true', help='Do not noise the CG atoms')
+parser.add_argument('--pos_cos', default=0., type=float, help='Scale of sin/cos embedding')
+parser.add_argument('--seq_feats', default=0, type=int, help='Number of relative sequence distance features to include')
+parser.add_argument('--seq_decay', default=100., type=float, help='Exp decay constant on sig feats')
+parser.add_argument('--act', default='SiLU', type=str, help='MLP activation')
+parser.add_argument('--grad_clip', default=0.0, type=float, help='Clip exploding grads')
 
 args = parser.parse_args()
 
@@ -59,16 +68,30 @@ diff_type = args.diff_type
 load_path = args.load_path
 top_path = args.top_path
 
-job_dir = f'./jobs/{system}_{loss_type}_m-{mdim}_dim-{dim}_nn-{num_nearest_neighbors}_depth-{depth}_eps-{n_epochs}_sigma-{sigma}_CG-noise-{Ca_std}_lr-{lr}_bpack-{batch_pack}'
+# MJ -- add for testing
+sym = args.sym
+sym_rep = args.sym_rep
+mask_prior = args.mask_prior
+pos_cos = args.pos_cos
+seq_feats = args.seq_feats
+seq_decay = args.seq_decay
+act = args.act
+grad_clip = args.grad_clip
 
+max_train = 100_000
+max_val = 100
+
+if mask_prior: msk_txt = '_mskp-inf'
+else: msk_txt = ''
+
+# MJ -- added name text since last push
+#new_txt = f'{sym}-{sym_rep}{msk_txt}_cos-emb-{pos_cos}'
+new_txt = f'{sym}-{sym_rep}_seq-feats-{seq_feats}_seq-decay-{int(seq_decay)}_act-{act}_clip-{grad_clip}'
+
+job_dir = f'./jobs/{system}_{new_txt}_{loss_type}_m-{mdim}_dim-{dim}_nn-{num_nearest_neighbors}_depth-{depth}_eps-{n_epochs}_sigma-{sigma}_CG-noise-{Ca_std}_lr-{lr}'
 os.makedirs(job_dir, exist_ok=True)
 
 # load different systems with max_atoms and encoding dim to ensure features will fit
-
-### TODO:
-# add only the two final feature sets to git (or probably will need to be in Zenodo)
-
-#topology are only needed for validation pdbs, we load these in seperately for protein dataset to save disk space
 
 if system == 'pro':
     if load_path == 'default':
@@ -84,8 +107,11 @@ if system == 'pro':
     atom_dim = 37
     
     # load idxs of training and validation pdbs (features)
-    train_idxs = np.load(f'./train_features/idxs_train_pro.npy')
-    valid_idxs = np.load(f'./train_features/idxs_valid_pro.npy')
+    train_idxs = np.load(f'./train_features/idxs_train_pro.npy')[:max_train]
+    valid_idxs = np.load(f'./train_features/idxs_valid_pro.npy')[:max_val]
+    
+    #print('train_idx', train_idxs[:10], train_idxs[-10:])
+    #print('valid_idxs', valid_idxs)
     
 elif system == 'DNApro':
     if load_path == 'default':
@@ -98,8 +124,26 @@ elif system == 'DNApro':
     atom_dim = 68    # make sure to fit all pro + dna atom types
 
     # obtained from mmseqs on DNA and pro sequences
-    train_idxs = np.load(f'./train_features/idxs_train_DNAPro.npy')
+    train_idxs = np.load(f'./train_features/idxs_train_DNAPro.npy')[:]
     valid_idxs = np.load(f'./train_features/idxs_valid_DNAPro.npy')
+
+# save hyperparams to pkl to reload model
+params_dict = { 'depth': depth,
+                'num_nearest_neighbors': num_nearest_neighbors,
+                'dim': dim, 
+                'mdim': mdim,
+                'max_atoms': max_atoms,
+                'res_dim': res_dim,
+                'atom_dim': atom_dim,
+                'sym':sym,
+                'pos_cos': pos_cos,
+                'seq_feats':seq_feats,
+                'seq_decay':seq_decay,
+                'act':act,
+                'grad_clip':grad_clip
+                }
+
+pkl.dump(params_dict, open(f'{job_dir}/params.pkl', 'wb'))
     
 # reformat CG mask
 masks = []
@@ -114,6 +158,10 @@ if pos==1:
 elif pos==0:
     pos_emb = None
 
+# whether or no to include sin/cos pos embedding 
+if pos_cos < 0.001:
+    pos_cos = None
+
 model = EGNN_Network_time(
     num_tokens = res_dim,
     num_positions = pos_emb,
@@ -127,7 +175,13 @@ model = EGNN_Network_time(
     time_dim=0,
     res_dim=res_dim,
     atom_dim=atom_dim,
+    sym=sym,
+    emb_cos_scale=pos_cos,
+    seq_feats=seq_feats,
+    seq_decay=seq_decay,
+    act=act
 ).to(device)
+print('params:', sum(p.numel() for p in model.parameters() if p.requires_grad))
 
 # should be able to remove cFM here
 FM = ConditionalFlowMatcher(sigma=sigma)
@@ -146,8 +200,12 @@ if xyz_true[0].shape[0] == 1:
 loss_list = []
 for epoch in range(n_epochs):
         
-    # this probably taking a while to set up each epoch
-    xyz_prior = get_prior_mix(xyz_true, load_dict['map'], scale=Ca_std)
+    # ensures using new noise profile at each epoch
+    if mask_prior:
+        xyz_prior = get_prior_mask(xyz_true, load_dict['map'], scale=Ca_std, masks=masks)
+    else:
+        xyz_prior = get_prior_mix(xyz_true, load_dict['map'], scale=Ca_std) # default
+
     train_dataset = FeatureDataset([xyz_true[i] for i in train_idxs], [xyz_prior[i] for i in train_idxs], 
                                    [load_dict['res'][i] for i in train_idxs], [load_dict['atom'][i] for i in train_idxs], 
                                    [load_dict['res'][i] for i in train_idxs], [masks[i] for i in train_idxs])
@@ -168,7 +226,7 @@ for epoch in range(n_epochs):
         if batch_pack == 'max':
             time_batch = (max_atoms // len(res_feats[0])) * batch_size
         elif batch_pack == 'uniform':
-            time_batch = batch_sizet = model(t, x.detach())
+            time_batch = batch_size
            
         # repeat values over time batch
         x1 = x1.repeat(time_batch, 1, 1)
@@ -209,6 +267,11 @@ for epoch in range(n_epochs):
             loss = torch.mean(torch.abs(vt - ut))
         
         loss.backward()
+
+        # add clipping
+        if grad_clip > 0.001:
+            nn_utils.clip_grad_norm_(model.parameters(), grad_clip)
+
         optimizer.step()
         mean_loss.append(loss.item())
         
@@ -235,6 +298,13 @@ for epoch in range(n_epochs):
             # when using mixed batch needs to be array
             xyz_test_prior = get_prior_mix(xyz_test_real, map_test, scale=Ca_std)
 
+            if mask_prior:
+                mask_test = np.ones(len(xyz_test_real[0]))
+                mask_test[load_dict['mask'][idx]] = 0
+                xyz_test_prior = get_prior_mask(xyz_test_real, map_test, scale=Ca_std, masks=[mask_test])
+            else:
+                xyz_test_prior = get_prior_mix(xyz_test_real, map_test, scale=Ca_std) # default
+
             model_wrpd = ModelWrapper(model=model, 
                               feats=torch.tensor(np.array([load_dict['res'][idx]])).int().to(device), 
                               mask=torch.tensor(np.array([masks[idx]])).bool().to(device).to(device), 
@@ -258,8 +328,8 @@ for epoch in range(n_epochs):
 
                     # accounts for different diff types
                     ode_traj = euler_integrator(model_wrpd, torch.tensor(xyz_test_prior,
-                                                                    dtype=torch.float32).to(device),
-                                                                    diff_type=diff_type)
+                                                                    dtype=torch.float32).to(device))
+                                                                    #diff_type=diff_type)
                        
             # assume we're working with one structure at a time
             xyz_gens = ode_traj[-1]
