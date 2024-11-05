@@ -1,4 +1,9 @@
-from egnn_utils import *
+#from egnn_utils import *
+
+import sys, os
+sys.path.append('../../')
+from utils import *
+
 import glob
 import pickle as pkl 
 
@@ -27,7 +32,7 @@ def process_pro_aa(load_dir, stride=1):
         return save_dir
         
     os.makedirs(save_dir, exist_ok=True)
-    pdb_list = glob.glob(f'{load_dir}/*pdb')
+    pdb_list = sorted(glob.glob(f'{load_dir}/*pdb'))
     
     print('\nCleaning data -- Only need to do this once')
     print('\nRetaining atoms... this could be slow')
@@ -328,17 +333,28 @@ def process_dna_cg(pdb, dcd=None, pro_trj=None, save_path='./sidechainnet_data/t
     
     return aa_trj
 
-# optionally add these functions to eval_utils
-def load_model(model_path, ckp, device):
+#@ optionally add these functions to eval_utils
+def load_model(model_path, ckp, device): #, sym='e3', pos_cos=None, seq_feats=0, seq_decay=100):
     '''Load model from a given path to device'''
     
     # load hyperparams associated with specific model
     model_params = pkl.load(open(f'{model_path}/params.pkl', 'rb')) 
 
+    ## TODO -- get rid or these inputs and always set pos_cos, num_positions to None
+    pos_cos = model_params['pos_cos']
+
+    # don't use normal pos encoding if using sin/cos
+    if pos_cos > 0.001:
+        num_positions = None
+    else: 
+        pos_cos = None
+        num_positions = None  # change this back ifthe 
+        #num_positions = model_params['max_atoms']
+
     model = EGNN_Network_time(
         num_tokens = model_params['res_dim'],
         atom_dim = model_params['atom_dim'],
-        num_positions = model_params['max_atoms'],
+        num_positions = num_positions, #model_params['max_atoms'],
         dim = model_params['dim'],               
         depth = model_params['depth'],
         num_nearest_neighbors = model_params['num_nearest_neighbors'],
@@ -348,7 +364,11 @@ def load_model(model_path, ckp, device):
         fourier_features = 4, 
         time_dim=0,
         res_dim=model_params['res_dim'],
-        
+        sym=model_params['sym'],
+        emb_cos_scale=pos_cos,
+        seq_feats=model_params['seq_feats'],
+        seq_decay=model_params['seq_decay'],
+        act=model_params['act'],
     ).to(device)
 
     # load model 
