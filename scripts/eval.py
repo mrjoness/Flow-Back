@@ -12,7 +12,7 @@ import time
 import datetime
 
 # need to test these for preproccessing
-from eval_utils import * #process_pro_aa, process_pro_cg, load_model, load_features_pro, load_features_DNApro, split_list
+from eval_utils import * 
 
 # import functions to check and correct chirality
 from chi_utils import *
@@ -35,6 +35,7 @@ parser.add_argument('--nsteps', default=100, type=int, help='Number of steps in 
 parser.add_argument('--system', default='pro', type=str, help='Pro or DNAPro CG input')
 parser.add_argument('--vram', default=16, type=int, help='Scale batch size to fit max gpu VRAM')
 parser.add_argument('--save_traj', action='store_true',  help='Save all flow-matching timesteps')
+parser.add_argument('--save_dcd', action='store_true',  help='Save traj output as a pdb+dcd')
 
 # for enantiomer correction
 parser.add_argument('--t_flip', default=0.2, type=float,  help='ODE time to correct fo D-residues')
@@ -60,6 +61,7 @@ type_flip = args.type_flip
 system = args.system
 vram = args.vram
 save_traj = args.save_traj
+save_dcd = args.save_dcd
 
 save_dir = f'../outputs/{load_dir}'
 load_dir = f'../data/{load_dir}'
@@ -226,13 +228,18 @@ for trj_name in tqdm(trj_list, desc='Iterating over trajs'):
     # save gen using same pdb name -- currently saving as n_frames * n_gens
     save_name = f'{save_prefix}{trj_name.split("/")[-1]}'
           
+    # if saving dt, only save a single gen
     if save_traj:
         save_i = save_name.replace('.pdb', f'_dt.pdb')
         trj_gens.save_pdb(save_i)
     else:
         for i in range(n_gens):
             save_i = save_name.replace('.pdb', f'_{i+1}.pdb')
-            trj_gens[i*n_frames:(i+1)*n_frames].save_pdb(save_i)
+            if save_dcd:
+                trj_gens[i*n_frames].save_pdb(save_i)
+                trj_gens[i*n_frames].save_dcd(save_i.replace('.pdb', '.dcd'))
+            else:
+                trj_gens[i*n_frames:(i+1)*n_frames].save_pdb(save_i)
 
 # save all scores to same dir
 if check_bonds:
