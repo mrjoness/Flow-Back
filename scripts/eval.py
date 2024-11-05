@@ -34,6 +34,13 @@ parser.add_argument('--tolerance', default=3e-5, type=float, help='Tolerance if 
 parser.add_argument('--nsteps', default=100, type=int, help='Number of steps in Euler integrator')
 parser.add_argument('--system', default='pro', type=str, help='Pro or DNAPro CG input')
 parser.add_argument('--vram', default=16, type=int, help='Scale batch size to fit max gpu VRAM')
+parser.add_argument('--save_traj', action='store_true',  help='Save all flow-matching timesteps')
+
+## added since last push
+# parser.add_argument('--sym', default='e3', type=str, help='equivariance of EGNN layers')
+# parser.add_argument('--pos_cos', default=0., type=float, help='Scale of sin/cos embedding')
+# parser.add_argument('--seq_feats', default=0, type=int, help='Number of relative sequence distance features to include')
+# parser.add_argument('--seq_decay', default=100., type=float, help='Exp decay constant on sig feats')
 
 # for enantiomer correction
 parser.add_argument('--t_flip', default=0.2, type=float,  help='ODE time to correct fo D-residues')
@@ -58,6 +65,13 @@ t_flip = args.t_flip
 type_flip = args.type_flip
 system = args.system
 vram = args.vram
+save_traj = args.save_traj
+
+## added since last push
+# sym  = args.sym
+# pos_cos = args.pos_cos
+# seq_feats = args.seq_feats
+# seq_decay = args.seq_decay
 
 save_dir = f'../outputs/{load_dir}'
 load_dir = f'../data/{load_dir}'
@@ -97,7 +111,8 @@ else:
     print('Invalid system type')
 
 # load model
-model = load_model(model_path, ckp, device)
+model = load_model(model_path, ckp, device) #, sym, pos_cos, seq_feats, seq_decay)
+print('params:', sum(p.numel() for p in model.parameters() if p.requires_grad))
 
 # Track scores
 bf_list, clash_list, div_list = [], [], []
@@ -105,7 +120,7 @@ bf_list, clash_list, div_list = [], [], []
 # save time for inference as a function of size -- over n-res?
 time_list, res_list = [], []
 
-trj_list = sorted(glob.glob(f'{load_dir}/*'))
+trj_list = sorted(glob.glob(f'{load_dir}/*.pdb'))
 print(f'Found {len(trj_list)} trajs to backmap')
 
 for trj_name in tqdm(trj_list, desc='Iterating over trajs'):
@@ -126,7 +141,7 @@ for trj_name in tqdm(trj_list, desc='Iterating over trajs'):
     xyz_ref = xyz[test_idxs]
     print(f'{trj_name.split("/")[-1]}   {n_frames} frames   {n_atoms} atoms   {n_gens} samples')
 
-    # ensure input will fit in 16GB VRAM 
+    # ensure input will fit into specified VRAM (16GB by default)
     n_iters = int(len(test_idxs) * len(res_ohe) / (vram*6_000)) + 1
     idxs_lists = split_list(test_idxs, n_iters)
     print(f'breaking up into {n_iters} batches:\n')
@@ -150,9 +165,9 @@ for trj_name in tqdm(trj_list, desc='Iterating over trajs'):
           
         # apply noise -- only masked values need to be filled here
         if mask_prior:
-            xyz_test_prior = get_prior_mix(xyz_test_real, map_test, scale=CG_noise, masks=mask_test)
+            xyz_test_prior = get_prior_mask(xyz_test_real, map_test, scale=CG_noise, masks=mask_test)
         else:
-            xyz_test_prior = get_prior_mix(xyz_test_real, map_test, scale=CG_noise, masks=None)
+            xyz_test_prior = get_prior_mask(xyz_test_real, map_test, scale=CG_noise, masks=None)
 
         # select solver (Euler by default)
         if solver == 'adapt':
@@ -182,20 +197,21 @@ for trj_name in tqdm(trj_list, desc='Iterating over trajs'):
         time_list.append(time_diff.total_seconds())
         res_list.append(trj.n_residues)
 
-        # save trj -- optionally save ODE integration not just last structure
-        xyz_gen.append(ode_traj[-1]) 
+        # save trj -- optionally save ODE integration not just last structure -- only for one gen
+        if save_traj:
+            xyz_gen.append(ode_traj.squeeze())
+        else:
+            xyz_gen.append(ode_traj[-1]) 
 
-    # save trj -- optionally save ODE integration not just last structure
+    print(np.shape(xyz_gen))
     xyz_gen = np.concatenate(xyz_gen)
-
-    # still using original top
-    #trj_gens = md.Trajectory(xyz_gen, top)
-    #trj_refs = md.Trajectory(xyz_ref, top)
+    print(xyz_gen.shape)
           
     # don't include DNA virtual atoms in top 
     aa_idxs = top.select(f"not name DS and not name DP and not name DB")
     trj_gens = md.Trajectory(xyz_gen[:, :top.n_atoms], top).atom_slice(aa_idxs)
     trj_refs = md.Trajectory(xyz_ref[:, :top.n_atoms], top).atom_slice(aa_idxs)
+    print(trj_gens.xyz.shape)
 
     # Can only calculate bonds and div if an AA reference is provided
     if check_bonds:
@@ -222,9 +238,13 @@ for trj_name in tqdm(trj_list, desc='Iterating over trajs'):
     # save gen using same pdb name -- currently saving as n_frames * n_gens
     save_name = f'{save_prefix}{trj_name.split("/")[-1]}'
           
-    for i in range(n_gens):
-        save_i = save_name.replace('.pdb', f'_{i+1}.pdb')
-        trj_gens[i*n_frames:(i+1)*n_frames].save_pdb(save_i)
+    if save_traj:
+        save_i = save_name.replace('.pdb', f'_dt.pdb')
+        trj_gens.save_pdb(save_i)
+    else:
+        for i in range(n_gens):
+            save_i = save_name.replace('.pdb', f'_{i+1}.pdb')
+            trj_gens[i*n_frames:(i+1)*n_frames].save_pdb(save_i)
 
 # save all scores to same dir
 if check_bonds:
@@ -247,3 +267,5 @@ except:
     pass
 
 print(f'\nSaved to:  {save_prefix}\n')
+
+#
