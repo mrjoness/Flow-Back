@@ -20,7 +20,7 @@ from chi_utils import *
 parser = argparse.ArgumentParser()
 parser.add_argument('--load_dir', default='PDB', type=str, help='Path to input pdbs -- Can be AA or CG')
 parser.add_argument('--CG_noise', default=0.003, type=float, help='Noise profile to use as prior')
-parser.add_argument('--ckp', default=10, type=int, help='Checkpoint for given mode')
+parser.add_argument('--ckp', default=14, type=int, help='Checkpoint for given mode')
 parser.add_argument('--n_gens', default=1, type=int, help='N generated samples per structure')
 parser.add_argument('--solver', default='euler', type=str, help='Which type of ODE solver to use')
 parser.add_argument('--stride', default='1', type=int, help='Stride applie to trajectories')
@@ -35,12 +35,6 @@ parser.add_argument('--nsteps', default=100, type=int, help='Number of steps in 
 parser.add_argument('--system', default='pro', type=str, help='Pro or DNAPro CG input')
 parser.add_argument('--vram', default=16, type=int, help='Scale batch size to fit max gpu VRAM')
 parser.add_argument('--save_traj', action='store_true',  help='Save all flow-matching timesteps')
-
-## added since last push
-# parser.add_argument('--sym', default='e3', type=str, help='equivariance of EGNN layers')
-# parser.add_argument('--pos_cos', default=0., type=float, help='Scale of sin/cos embedding')
-# parser.add_argument('--seq_feats', default=0, type=int, help='Number of relative sequence distance features to include')
-# parser.add_argument('--seq_decay', default=100., type=float, help='Exp decay constant on sig feats')
 
 # for enantiomer correction
 parser.add_argument('--t_flip', default=0.2, type=float,  help='ODE time to correct fo D-residues')
@@ -66,12 +60,6 @@ type_flip = args.type_flip
 system = args.system
 vram = args.vram
 save_traj = args.save_traj
-
-## added since last push
-# sym  = args.sym
-# pos_cos = args.pos_cos
-# seq_feats = args.seq_feats
-# seq_decay = args.seq_decay
 
 save_dir = f'../outputs/{load_dir}'
 load_dir = f'../data/{load_dir}'
