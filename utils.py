@@ -20,7 +20,6 @@ import math
 #try:
 from egnn_pytorch_se3.egnn_pytorch import EGNN_SE3, EGNN
 se3_avail = True
-print('using egnn_pytorch SE3')
     
 # except:
 #     from egnn_pytorch import EGNN
