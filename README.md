@@ -73,8 +73,20 @@ cd scripts
 python featurize_pro.py --pdb_dir ../train_PDBs/ --save_name pro-train
 ```
 
-
 # Cite as
+
+Journal article:
+```bibtex
+@article{jones2025flowback,
+  title={FlowBack: A Generalized Flow-Matching Approach for Biomolecular Backmapping},
+  author={Jones, Michael S and Khanna, Smayan and Ferguson, Andrew L},
+  journal={Journal of Chemical Information and Modeling},
+  year={2025},
+  publisher={ACS Publications}
+}
+```
+
+Workshop paper:
 ```bibtex
 @inproceedings{jones24flowback,
   title={FlowBack: A Flow-matching Approach for Generative Backmapping of Macromolecules},
