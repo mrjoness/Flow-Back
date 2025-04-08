@@ -2,7 +2,10 @@ import glob
 import mdtraj as md
 import pickle as pkl
 import argparse
-from utils.egnn_utils import get_pro_ohes, get_aa_to_cg
+
+import sys
+sys.path.append('../')
+from utils import get_pro_ohes, get_aa_to_cg
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--pdb_dir', type=str, help='Load pdbs from this dir')
