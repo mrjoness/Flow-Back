@@ -43,11 +43,6 @@ Backmap a short (10-frame) CG trajectory containing only C\-alpha atoms:
     
     python eval.py --n_gens 3 --load_dir pro_traj_example --mask_prior
 
-DNA–protein backmapping examples (ckp 900 recommended):
-    
-    python eval.py --n_gens 5 --system DNApro --load_dir DNApro_example --model_path ../models/DNAPro_pretrained --ckp 900 --mask_prior --retain_AA
-    python eval.py --n_gens 3 --system DNApro --load_dir DNApro_traj_example --model_path ../models/DNAPro_pretrained --ckp 900 --mask_prior
-
 ---
 
 ## Training (base FlowBack)
@@ -89,17 +84,16 @@ During post-training, energies are computed for generated structures and used as
 
 Editable configs live in:
     
-    configs/post_training/
+    configs/
 
 You can change:
 - Energy backend: `rdkit` or `charmm`
 - Energy-loss weight in the adjoint objective
 - Training hyperparameters (learning rate, batch size, etc.)
-- Paths to **GROMACS** executables and **CHARMM** force fields (for CHARMM mode)
 
 ### Example usage
     
-    python train_adjoint.py --config configs/post_training/charmm.yaml
+    python post_train.py --config configs/charmm.yaml
 
 ---
 
