@@ -10,7 +10,7 @@
 
 ### Env setup
     git clone https://github.com/mrjoness/Flow-Back.git
-    conda create -n flowback python=3.9
+    conda create -n flowback python=3.12
     conda activate flowback
     pip install egnn_pytorch   # installs torch-2.3 + cu12-12; verify CUDA/Torch compatibility
     pip install -c conda-forge openmm sidechainnet
