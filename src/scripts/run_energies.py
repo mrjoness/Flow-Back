@@ -1,12 +1,14 @@
 import argparse
-import numpy as np
+import glob
 import mdtraj as md
 import multiprocessing as mp
-from energy_utils import charmm_structure_to_energy
+import numpy as np
 import os
-from pathlib import Path
 from datetime import datetime
-import glob
+from pathlib import Path
+
+from file_config import FLOWBACK_DATA, FLOWBACK_OUTPUTS
+from src.utils.energy import charmm_structure_to_energy
 
 
 
@@ -28,22 +30,22 @@ def gather_pdb_paths(args) -> list[str]:
     """
     # 1) --- “short” set -------------------------------------------------------
     if args.short:
-        base = Path('/project2/andrewferguson/berlaga/Flow-Back/data/train')
+        base = Path(FLOWBACK_DATA) / 'train'
         with open(base / 'under_50.txt') as fh:
             return [str(base / f'{line.strip()}.pdb') for line in fh]
 
     # 2) --- “valid” set -------------------------------------------------------
     elif args.valid:
-        base = Path('/project2/andrewferguson/berlaga/Flow-Back/data/valid_clean_AA')
+        base = Path(FLOWBACK_DATA) / 'valid_clean_AA'
         return [str(p) for p in base.glob('*.pdb')]
 
     else:
         # 3) --- “no‑model” set ----------------------------------------------------
         if args.nomodel:
             if args.bioemu:
-                prefix = f'data/{args.data}'
+                prefix = f'{FLOWBACK_DATA}/{args.data}'
             else:
-                prefix = f'data/{args.data}_clean_AA'
+                prefix = f'{FLOWBACK_DATA}/{args.data}_clean_AA'
         # 4) --- model‑generated structures ---------------------------------------
         else:
             if args.nonoise:
@@ -52,7 +54,7 @@ def gather_pdb_paths(args) -> list[str]:
                 model_ckp = f'{args.model}_ckp-{args.checkpoint}_noise-{args.noise}'
             if args.chi != '':
                 model_ckp += f'_chi_{args.chi}'
-            prefix = f'outputs/{args.data}/{model_ckp}'       
+            prefix = f'{FLOWBACK_OUTPUTS}/{args.data}/{model_ckp}'
 
     
         # 4a) “discover everything in the folder” (num_structures == 0) -----------
@@ -107,18 +109,18 @@ def default_output_name(args) -> str:
     Replicates the naming scheme you used before.
     """
     if args.short:
-        return 'energy_files/energies_short_pdbs_nomodel.npy'
+        return f'{FLOWBACK_OUTPUTS}/energy_files/energies_short_pdbs_nomodel.npy'
     if args.valid:
-        return 'energy_files/energies_true_valid.npy'
+        return f'{FLOWBACK_OUTPUTS}/energy_files/energies_true_valid.npy'
     if args.nomodel:
-        return f'energy_files/energies_{args.data}_nomodel.npy'
+        return f'{FLOWBACK_OUTPUTS}/energy_files/energies_{args.data}_nomodel.npy'
 
     model_ckp = f'{args.model}_ckp-{args.checkpoint}_noise-{args.noise}'
     if args.chi != '':
         model_ckp += f'_chi_{args.chi}'
 
     
-    return f'energy_files/energies_{args.data}_{model_ckp}.npy'
+    return f'{FLOWBACK_OUTPUTS}/energy_files/energies_{args.data}_{model_ckp}.npy'
 
 def main():
     parser = argparse.ArgumentParser(

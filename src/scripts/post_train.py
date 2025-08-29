@@ -1,7 +1,6 @@
 ### input directory to pdbs/trajs and return N generated samples of each ###
-import sys, os
-sys.path.append('./scripts/utils/')
-sys.path.append('./scripts/')
+import os
+from file_config import FLOWBACK_JOBDIR, FLOWBACK_DATA, FLOWBACK_BASE
 import argparse
 import glob
 import pickle as pkl
@@ -9,12 +8,12 @@ from tqdm import tqdm
 import time
 import datetime
 # need to test these for preproccessing
-from eval_utils import * 
-from adjoint import *
+from src.utils.evaluation import *
+from src.adjoint import *
 # import functions to check and correct chirality
-from chi_utils import *
+from src.utils.chi import *
 from torch.utils.data import Dataset, DataLoader, Subset
-from conditional_flow_matching import ConditionalFlowMatcher
+from src.conditional_flow_matching import ConditionalFlowMatcher
 import argparse
 from torch.optim.lr_scheduler import StepLR
 import torch.nn.utils as nn_utils
@@ -52,7 +51,7 @@ def setup_args(parser: ArgumentParser) -> ArgumentParser:
         ArgumentParser with added arguments
     """
     
-    parser.add_argument('--config', type=str, default='configs/pt_config.yaml', help='Path to config file')
+    parser.add_argument('--config', type=str, default=f'{FLOWBACK_BASE}/configs/pt_config.yaml', help='Path to config file')
     parser.add_argument('--test', action="store_true", help='For testing purposes')
     parser.add_argument('--compare', action='store_true', help='Just for printing energies')
     return parser
@@ -235,14 +234,14 @@ if __name__ == '__main__':
     
     # save time for inference as a function of size -- over n-res?
     
-    job_dir = f'jobs/{save_dir}_post'
+    job_dir = f'{FLOWBACK_JOBDIR}/{save_dir}_post'
     os.makedirs(job_dir, exist_ok=True)
     
     all_dirs = load_dir.split()
     full_trj_list = []
     for dir in all_dirs:
         print(dir)
-        ldir = f'./data/{dir}'
+        ldir = f'{FLOWBACK_DATA}/{dir}'
         if retain_AA:
             ldir = process_pro_aa(ldir)
         else:

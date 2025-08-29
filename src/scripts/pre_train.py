@@ -1,5 +1,6 @@
-from utils import *
-from conditional_flow_matching import ConditionalFlowMatcher
+from src.utils.model import *
+from src.conditional_flow_matching import ConditionalFlowMatcher
+from file_config import FLOWBACK_JOBDIR, FLOWBACK_INPUTS, FLOWBACK_BASE
 import argparse
 import pickle as pkl
 from torch.optim.lr_scheduler import StepLR
@@ -35,7 +36,7 @@ def setup_args(parser: ArgumentParser) -> ArgumentParser:
         ArgumentParser with added arguments
     """
     
-    parser.add_argument('--config', type=str, default='configs/config.yaml', help='Path to config file')
+    parser.add_argument('--config', type=str, default=f'{FLOWBACK_BASE}/configs/config.yaml', help='Path to config file')
 
     
     return parser

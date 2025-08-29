@@ -1,8 +1,8 @@
 #from egnn_utils import *
 
-import sys, os
-sys.path.append('../../')
-from utils import *
+import os, tempfile
+from file_config import FLOWBACK_OUTPUTS
+from .model import *
 
 import glob
 import pickle as pkl 
@@ -97,8 +97,10 @@ def process_pro_aa(load_dir, stride=1):
         xyz = aa_trj.xyz[:, np.array(idx_list)]
 
         # save txt as temporary pdb and load new molecules
-        open('.temp.pdb', 'w').write(aa_pdb)
-        trj_aa_fix = md.load('.temp.pdb')
+        with tempfile.NamedTemporaryFile('w', suffix='.pdb') as tmp:
+            tmp.write(aa_pdb)
+            tmp.flush()
+            trj_aa_fix = md.load(tmp.name)
         trj_aa_fix = md.Trajectory(xyz, topology=trj_aa_fix.top)
 
         # save pdb -- save as dcd if longer than
@@ -192,8 +194,10 @@ def process_pro_cg(load_dir, stride=1):
         xyz[:, np.array(ca_idxs)] = cg_xyz
 
         # save txt as temporary pdb and load new molecules
-        open('.temp.pdb', 'w').write(aa_pdb)
-        trj_aa_fix = md.load('.temp.pdb')
+        with tempfile.NamedTemporaryFile('w', suffix='.pdb') as tmp:
+            tmp.write(aa_pdb)
+            tmp.flush()
+            trj_aa_fix = md.load(tmp.name)
         trj_aa_fix = md.Trajectory(xyz, topology=trj_aa_fix.top)
 
         # save pdb
@@ -202,7 +206,7 @@ def process_pro_cg(load_dir, stride=1):
               
     return save_dir
 
-def process_dna_cg(pdb, dcd=None, pro_trj=None, save_path='./sidechainnet_data/test', stride=1, bsp_reorder=False):
+def process_dna_cg(pdb, dcd=None, pro_trj=None, save_path=f'{FLOWBACK_OUTPUTS}/sidechainnet_data/test', stride=1, bsp_reorder=False):
     '''Write a blank pdb for the dna coords -- keep the CG section the same as ref'''
     
     standard_order = {
@@ -288,10 +292,11 @@ def process_dna_cg(pdb, dcd=None, pro_trj=None, save_path='./sidechainnet_data/t
     aa_pdb += '\nENDMDL\nEND'
     
     # save txt as temporary pdb and load new molecules
-    open('temp.pdb', 'w').write(aa_pdb)
-    
-    # matching aa_traj with orginal number of frames
-    aa_trj = md.load('temp.pdb')
+    with tempfile.NamedTemporaryFile('w', suffix='.pdb') as tmp:
+        tmp.write(aa_pdb)
+        tmp.flush()
+        # matching aa_traj with original number of frames
+        aa_trj = md.load(tmp.name)
     aa_xyz = np.zeros((n_frames, aa_trj.n_atoms, 3))
     aa_trj= md.Trajectory(aa_xyz, topology=aa_trj.top)
     print(n_frames, aa_trj.xyz.shape, cg_trj.xyz.shape)

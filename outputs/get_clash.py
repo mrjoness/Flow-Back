@@ -1,7 +1,6 @@
-import sys
 import os
-sys.path.append('..')
-from utils import bond_fraction, clash_res_percent
+from file_config import FLOWBACK_BASE, FLOWBACK_DATA, FLOWBACK_OUTPUTS
+from src.utils.model import bond_fraction, clash_res_percent
 import mdtraj as md
 import numpy as np
 import glob
@@ -9,9 +8,8 @@ from tqdm import tqdm
 from pathlib import Path
 from joblib import Parallel, delayed            # NEW!
 import re
-import argparse 
-import warnings         
-from file_config import *
+import argparse
+import warnings
 warnings.filterwarnings("ignore") 
 
 def _natural_key(path: Path):
@@ -121,7 +119,7 @@ def main(list_file: str, n_jobs: int, hpack):
                 chosen = model
                 print(f"• Model: {chosen}")
                 
-                traj_dir = f"{protein}/{chosen}"
+                traj_dir = f"{FLOWBACK_OUTPUTS}/{protein}/{chosen}"
                 
                 traj = load_or_generate_trajectory(
                     traj_dir,

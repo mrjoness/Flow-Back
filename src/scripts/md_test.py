@@ -1,5 +1,4 @@
 import subprocess
-import sys
 import tempfile
 import shutil
 import numpy as np
@@ -7,11 +6,12 @@ from openmm import *
 import os
 from openmm.app import *
 from openmm.unit import *
-import argparse 
+import argparse
 import glob
-import mdtraj as md 
+import mdtraj as md
 import MDAnalysis as mda
 from collections import defaultdict
+from file_config import FLOWBACK_DATA, FLOWBACK_OUTPUTS
 
 def _osremove(f):
     try:
@@ -310,17 +310,17 @@ def main():
     model = args.model
     
     if args.nomodel:
-        pdb_files = glob.glob(f"data/{args.protein}_clean_AA/*.pdb")
-        stat_file = f'stat_files/{args.protein}_nomodel_stats.txt'
+        pdb_files = glob.glob(f"{FLOWBACK_DATA}/{args.protein}_clean_AA/*.pdb")
+        stat_file = f"{FLOWBACK_OUTPUTS}/stat_files/{args.protein}_nomodel_stats.txt"
     elif args.nosuffix: 
-        pdb_files = glob.glob(f"outputs/{args.protein}/{model}/*.pdb")
-        stat_file = f'stat_files/{args.protein}_{model}_stats.txt'
+        pdb_files = glob.glob(f"{FLOWBACK_OUTPUTS}/{args.protein}/{model}/*.pdb")
+        stat_file = f"{FLOWBACK_OUTPUTS}/stat_files/{args.protein}_{model}_stats.txt"
     elif args.num_files == 0:
-        pdb_files = glob.glob(f"outputs/{args.protein}/{model}_noise-0.003/*.pdb")
-        stat_file = f'stat_files/{args.protein}_{model}_stats.txt'
+        pdb_files = glob.glob(f"{FLOWBACK_OUTPUTS}/{args.protein}/{model}_noise-0.003/*.pdb")
+        stat_file = f"{FLOWBACK_OUTPUTS}/stat_files/{args.protein}_{model}_stats.txt"
     else:
-        pdb_files = [f"outputs/{args.protein}/{model}_noise-0.003/frame_{i}_1.pdb" for i in range(args.num_files)]
-        stat_file = f'stat_files/{args.protein}_{model}_stats.txt'
+        pdb_files = [f"{FLOWBACK_OUTPUTS}/{args.protein}/{model}_noise-0.003/frame_{i}_1.pdb" for i in range(args.num_files)]
+        stat_file = f"{FLOWBACK_OUTPUTS}/stat_files/{args.protein}_{model}_stats.txt"
 
     if args.noh:
         stat_file = f'{stat_file[:-4]}_noh.txt'
