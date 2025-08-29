@@ -1,9 +1,6 @@
 ### input directory to pdbs/trajs and return N generated samples of each ###
-import sys, os
-import sys
-from file_config import FLOWBACK_SCRIPTS, FLOWBACK_JOBDIR, FLOWBACK_DATA, FLOWBACK_BASE
-sys.path.append(f"{FLOWBACK_SCRIPTS}/utils")
-sys.path.append(FLOWBACK_SCRIPTS)
+import os
+from file_config import FLOWBACK_JOBDIR, FLOWBACK_DATA, FLOWBACK_BASE
 import argparse
 import glob
 import pickle as pkl
@@ -11,10 +8,10 @@ from tqdm import tqdm
 import time
 import datetime
 # need to test these for preproccessing
-from eval_utils import *
+from src.utils.evaluation import *
 from src.adjoint import *
 # import functions to check and correct chirality
-from chi_utils import *
+from src.utils.chi import *
 from torch.utils.data import Dataset, DataLoader, Subset
 from src.conditional_flow_matching import ConditionalFlowMatcher
 import argparse

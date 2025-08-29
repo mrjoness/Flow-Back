@@ -4,7 +4,7 @@ import os
 FLOWBACK_BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 FLOWBACK_SRC = f"{FLOWBACK_BASE}/src"
-FLOWBACK_SCRIPTS = f"{FLOWBACK_BASE}/scripts"
+FLOWBACK_SCRIPTS = f"{FLOWBACK_SRC}/scripts"
 FLOWBACK_JOBDIR = f"{FLOWBACK_BASE}/jobs"
 FLOWBACK_MODELS = f"{FLOWBACK_BASE}/models"
 FLOWBACK_OUTPUTS = f"{FLOWBACK_BASE}/outputs"

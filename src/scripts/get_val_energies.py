@@ -1,9 +1,7 @@
 ### input directory to pdbs/trajs and return N generated samples of each ###
 import re
-import sys, os
-from file_config import FLOWBACK_SCRIPTS, FLOWBACK_JOBDIR, FLOWBACK_DATA, FLOWBACK_OUTPUTS, FLOWBACK_MODELS
-sys.path.append(FLOWBACK_SCRIPTS)
-sys.path.append(f"{FLOWBACK_SCRIPTS}/utils")
+import os
+from file_config import FLOWBACK_JOBDIR, FLOWBACK_DATA, FLOWBACK_OUTPUTS, FLOWBACK_MODELS
 from collections import defaultdict
 import argparse
 import glob
@@ -21,11 +19,11 @@ def extract_numbers(filename):
     return (state_num, step_num)
     
 # need to test these for preproccessing
-from eval_utils import *
-from src.energy_utils import charmm_structure_to_energy
+from src.utils.evaluation import *
+from src.utils.energy import charmm_structure_to_energy
 
 # import functions to check and correct chirality
-from chi_utils import *
+from src.utils.chi import *
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--CG_noise', default=0.003, type=float, help='Noise profile to use as prior')

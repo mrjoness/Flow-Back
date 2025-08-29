@@ -1,9 +1,7 @@
 ### input directory to pdbs/trajs and return N generated samples of each ###
 
-import sys, os
-from file_config import FLOWBACK_SRC, FLOWBACK_SCRIPTS, FLOWBACK_OUTPUTS, FLOWBACK_DATA, FLOWBACK_MODELS
-sys.path.append(FLOWBACK_SRC)
-sys.path.append(f"{FLOWBACK_SCRIPTS}/utils")
+import os
+from file_config import FLOWBACK_OUTPUTS, FLOWBACK_DATA, FLOWBACK_MODELS
 
 import argparse
 import glob
@@ -13,10 +11,10 @@ import time
 import datetime
 
 # need to test these for preproccessing
-from eval_utils import * 
+from src.utils.evaluation import *
 
 # import functions to check and correct chirality
-from chi_utils import *
+from src.utils.chi import *
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--load_dir', default='PDB', type=str, help='Path to input pdbs -- Can be AA or CG')

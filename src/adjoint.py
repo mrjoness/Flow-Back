@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from .utils import *
-from .energy_utils import *
+from .utils.model import *
+from .utils.energy import *
 from datetime import datetime
 import numpy as np
 import mdtraj as md
@@ -10,10 +10,7 @@ import os
 import psutil
 import gc
 from memory_profiler import profile
-import sys
-from file_config import FLOWBACK_SCRIPTS
-sys.path.append(f"{FLOWBACK_SCRIPTS}/utils")
-from chi_utils import *
+from .utils.chi import *
 from copy import deepcopy
 # NUM_STEPS = 100
 

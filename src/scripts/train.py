@@ -1,4 +1,4 @@
-from src.utils import *
+from src.utils.model import *
 from src.conditional_flow_matching import ConditionalFlowMatcher
 from file_config import FLOWBACK_JOBDIR, FLOWBACK_INPUTS
 import argparse

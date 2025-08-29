@@ -1,8 +1,6 @@
-import sys
 import os
-from file_config import FLOWBACK_SRC, FLOWBACK_BASE, FLOWBACK_DATA, FLOWBACK_OUTPUTS
-sys.path.append(FLOWBACK_SRC)
-from utils import bond_fraction, clash_res_percent
+from file_config import FLOWBACK_BASE, FLOWBACK_DATA, FLOWBACK_OUTPUTS
+from src.utils.model import bond_fraction, clash_res_percent
 import mdtraj as md
 import numpy as np
 import glob

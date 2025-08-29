@@ -1,13 +1,14 @@
 import argparse
-import numpy as np
+import glob
 import mdtraj as md
 import multiprocessing as mp
-from src.energy_utils import charmm_structure_to_energy
+import numpy as np
 import os
-from pathlib import Path
 from datetime import datetime
-import glob
+from pathlib import Path
+
 from file_config import FLOWBACK_DATA, FLOWBACK_OUTPUTS
+from src.utils.energy import charmm_structure_to_energy
 
 
 

@@ -1,5 +1,4 @@
 import subprocess
-import sys
 import tempfile
 import shutil
 import numpy as np

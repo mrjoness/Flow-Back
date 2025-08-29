@@ -1,9 +1,8 @@
 #from egnn_utils import *
 
-import sys, os, tempfile
-from file_config import FLOWBACK_SRC, FLOWBACK_OUTPUTS
-sys.path.append(FLOWBACK_SRC)
-from src.utils import *
+import os, tempfile
+from file_config import FLOWBACK_OUTPUTS
+from .model import *
 
 import glob
 import pickle as pkl 
