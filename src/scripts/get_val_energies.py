@@ -123,13 +123,10 @@ for m_i, mpath in enumerate(sorted_models):
                
         
         
-                print(ode_traj.shape)
                 # save trj -- optionally save ODE integration not just last structure -- only for one gen
                 xyz_gen.append(ode_traj[-1] + ca_pos_test) 
         
-            print(np.shape(xyz_gen))
             xyz_gen = np.concatenate(xyz_gen)
-            print(xyz_gen.shape)
                   
             # don't include DNA virtual atoms in top 
             aa_idxs = top.select(f"not name DS and not name DP and not name DB")

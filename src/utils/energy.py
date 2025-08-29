@@ -35,22 +35,6 @@ def compute_all_distances(traj):
     dists = md.compute_distances(traj, pairs)
     return dists
 
-def print_memory_usage():
-    process = psutil.Process(os.getpid())
-    mem_info = process.memory_info()
-    
-    print(f"Process RSS: {mem_info.rss / (1024 * 1024):.2f} MB")
-    print(f"Process VMS: {mem_info.vms / (1024 * 1024):.2f} MB")
-
-
-def time_elapsed(func):
-    def wrapper(*args, **kwargs):
-        start = time.time()
-        result = func(*args, **kwargs)
-        elapsed = time.time() - start
-        print(f"Time elapsed: {elapsed:.6f} seconds")
-        return result
-    return wrapper
     
 class EnergyModel(torch.nn.Module):
     def __init__(self, energy_func, topology):
@@ -71,7 +55,6 @@ class EnergyFunction(torch.autograd.Function):
         external_energy_func: A function that returns (energy, gradient).
         REQUIRES input_tensor to be coordinates IDENTICAL to topology_pdb
         """
-        # print(input_tensor.requires_grad)
         input_numpy = input_tensor.detach().cpu().numpy()  # Convert to NumPy
         energies, gradients = energy_func(topology, input_numpy)
         ctx.save_for_backward(torch.from_numpy(gradients).to(input_tensor.device))  # Save gradient
@@ -118,7 +101,6 @@ def charmm_structure_to_energy(topology: md.Topology, xyz: np.ndarray, nonbonded
 
         stdout, stderr = process.communicate('0\n0\n')
         if process.returncode != 0:
-            print_memory_usage()
             print(f"Energy calculation failed at pdb2gmx step. Error:\n{stderr}")
             return np.zeros_like(xyz)
        
@@ -177,7 +159,6 @@ def charmm_structure_to_energy(topology: md.Topology, xyz: np.ndarray, nonbonded
                     p1, p2, p3, p4, params = force_.getTorsionParameters(i)
                     if p1 in selected_atoms and p2 in selected_atoms and p3 in selected_atoms and p4 in selected_atoms:
                         new_custom_torsion_force.addTorsion(p1, p2, p3, p4, params)
-        # print_memory_usage()
         # Remove old forces and add the new ones
         for fi in range(len(system.getForces()) - 1, -1, -1):
             force_ = system.getForce(fi)
@@ -317,7 +298,6 @@ def silence_atoms_and_shift_charge(nbforce, topology, mute, context=None):
     mute    = set(int(i) for i in mute)
     shifts  = defaultdict(lambda: 0.0*elementary_charge)   # charge → heavy atom
     nbforce.setUseDispersionCorrection(False)
-    # print(nbforce.getNonbondedMethod())
     # nbforce.setNonbondedMethod(NonbondedForce.CutoffPeriodic)
     # ------------------------------------------------------------------
     # 1. build a quick neighbour map from the Topology
@@ -339,7 +319,6 @@ def silence_atoms_and_shift_charge(nbforce, topology, mute, context=None):
             # first bonded neighbour that is NOT muted
             try:
                 parent = next(n for n in neighbours[idx] if n not in mute)
-                # print(topology.atom(parent), q)
                 shifts[parent] += q
             except StopIteration:
                 warnings.warn(f"Atom {idx} is muted but has no non-muted neighbours;"
@@ -366,7 +345,6 @@ def silence_atoms_and_shift_charge(nbforce, topology, mute, context=None):
         
         qi = nbforce.getParticleParameters(i)[0]
         qj = nbforce.getParticleParameters(j)[0]
-        # print(topology.atom(i), topology.atom(j), sigma, eps)
         if topology.atom(i).element.name == 'hydrogen' or topology.atom(j).element.name =='hydrogen':
             nbforce.setExceptionParameters(k, i, j, qi*qj, sigma, 0.0*kilojoule_per_mole)
         else:

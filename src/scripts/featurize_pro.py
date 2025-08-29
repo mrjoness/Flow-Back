@@ -57,9 +57,6 @@ for pdb in pdb_list:
     except Exception as e:
         print(f'Failed {pdb} due to {e}')
 
-    if cnt%100==0 and cnt > 0:
-        print(cnt)                    
-              
 save_dict = {'res':res_list,'atom':atom_list,'xyz':xyz_list,'mask':mask_list,'map':aa_to_cg_list}
 pkl.dump(save_dict, open(f'{FLOWBACK_INPUTS}/train_features/feats_{args.save_name}.pkl', 'wb'))
 

@@ -299,7 +299,6 @@ def process_dna_cg(pdb, dcd=None, pro_trj=None, save_path=f'{FLOWBACK_OUTPUTS}/s
         aa_trj = md.load(tmp.name)
     aa_xyz = np.zeros((n_frames, aa_trj.n_atoms, 3))
     aa_trj= md.Trajectory(aa_xyz, topology=aa_trj.top)
-    print(n_frames, aa_trj.xyz.shape, cg_trj.xyz.shape)
     
     # can drop this now?
     # depending on parser may need to re-order cg_trj as B-S-P to P-S-B (or CG ordering is different from AICG+3spn2)
@@ -316,7 +315,6 @@ def process_dna_cg(pdb, dcd=None, pro_trj=None, save_path=f'{FLOWBACK_OUTPUTS}/s
 
         cg_xyz = cg_trj.xyz[:, np.array(cg_idxs)]
     else:
-        print('No re-order')
         cg_xyz = cg_trj.xyz
 
     # concatenate aa trace with cg trace

@@ -111,8 +111,6 @@ if system == 'pro':
     train_idxs = np.load(f"{FLOWBACK_INPUTS}/train_features/idxs_train_pro.npy")[:max_train]
     valid_idxs = np.load(f"{FLOWBACK_INPUTS}/train_features/idxs_valid_pro.npy")[:max_val]
     
-    #print('train_idx', train_idxs[:10], train_idxs[-10:])
-    #print('valid_idxs', valid_idxs)
     
 elif system == 'DNApro':
     if load_path == 'default':
@@ -182,7 +180,6 @@ model = EGNN_Network_time(
     seq_decay=seq_decay,
     act=act
 ).to(device)
-print('params:', sum(p.numel() for p in model.parameters() if p.requires_grad))
 
 # should be able to remove cFM here
 FM = ConditionalFlowMatcher(sigma=sigma)
@@ -342,7 +339,6 @@ for epoch in range(n_epochs):
             except:
                 top = load_dict['top'][idx]
             
-            print(xyz_gens.shape, xyz_ref.shape, top.n_atoms)
             
             # need n_atoms to account for pro-dna case
             trj_gens = md.Trajectory(xyz_gens[:, :top.n_atoms], top)
