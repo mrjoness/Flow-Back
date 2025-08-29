@@ -492,9 +492,6 @@ class EGNN_SE3(nn.Module):
         # get all cross terms
         coors_no_mean = coors - coors.mean(axis=1)[:, None, :]
 
-        # print('coors', coors.shape, coors.mean(axis=1).shape, coors.mean(axis=1)[:, None, :].shape)
-        # print('coors_no_mean', coors_no_mean.mean(axis=1))
-        # print('means', coors_no_mean.mean(dim=0).shape, coors_no_mean.mean(dim=1).shape, coors_no_mean.mean(dim=2).shape)
         
         cross_coors = torch.linalg.cross(
             rearrange(coors_no_mean, 'b i d -> b i () d'), 
@@ -602,7 +599,6 @@ class EGNN_SE3(nn.Module):
             #         coors_cross_ij = coors_cross_ij / (coors_cross_norm + 1)
             #         coors_cross_ij = coors_cross_ij * coor_weights_cross[:, i, j][:, None].expand(-1, 3)
             #         coors_cross[:, i] += coors_cross_ij
-            # print('cross loop outputs:', coors_cross[0, 0], '\n')
             # coors_out += coors_cross
 
         else:

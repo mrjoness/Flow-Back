@@ -78,7 +78,6 @@ if mask_prior:
 os.makedirs(save_prefix, exist_ok=True)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(device)
 
 # add optional preprocessing to save files -- skip if already cleaned
 if system == 'pro':
@@ -101,7 +100,6 @@ else:
 
 # load model
 model = load_model(model_path, ckp, device) #, sym, pos_cos, seq_feats, seq_decay)
-print('params:', sum(p.numel() for p in model.parameters() if p.requires_grad))
 
 # Track scores
 bf_list, clash_list, div_list = [], [], []
@@ -192,15 +190,12 @@ for trj_name in tqdm(trj_list, desc='Iterating over trajs'):
         else:
             xyz_gen.append(ode_traj[-1]) 
 
-    print(np.shape(xyz_gen))
     xyz_gen = np.concatenate(xyz_gen)
-    print(xyz_gen.shape)
           
     # don't include DNA virtual atoms in top 
     aa_idxs = top.select(f"not name DS and not name DP and not name DB")
     trj_gens = md.Trajectory(xyz_gen[:, :top.n_atoms], top).atom_slice(aa_idxs)
     trj_refs = md.Trajectory(xyz_ref[:, :top.n_atoms], top).atom_slice(aa_idxs)
-    print(trj_gens.xyz.shape)
 
     # Can only calculate bonds and div if an AA reference is provided
     if check_bonds:

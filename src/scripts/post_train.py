@@ -228,7 +228,6 @@ if __name__ == '__main__':
     # optimizer = torch.optim.SGD(model_ft.parameters(), lr=lr)
     
     optimizer.zero_grad()
-    # print('params:', sum(p.numel() for p in model_ft.parameters() if p.requires_grad))
     
     
     
@@ -240,7 +239,6 @@ if __name__ == '__main__':
     all_dirs = load_dir.split()
     full_trj_list = []
     for dir in all_dirs:
-        print(dir)
         ldir = f'{FLOWBACK_DATA}/{dir}'
         if retain_AA:
             ldir = process_pro_aa(ldir)
@@ -325,7 +323,6 @@ if __name__ == '__main__':
             # prior = [np.random.randn(xyz_true[i].shape[0], xyz_true[i].shape[1]) * Ca_std for i in train_idxs]
         
             # xyz_diff = [xyz_true[i] - ca_pos[i] for i in train_idxs]
-            # print(xyz_diff)
             pt_dataset = PostTrainDataset([res_list[i] for i in train_idxs], [atom_list[i] for i in train_idxs], 
                                            [ca_pos[i] for i in train_idxs], [mask_list[i] for i in train_idxs])
         
@@ -421,7 +418,6 @@ if __name__ == '__main__':
                             print('Loss', loss.item())
                             loss.backward()
                         if (i+1) % acc_grad_batch == 0:
-                            # print('Stepping')
                             optimizer.step()
                             lr_scheduler.step()
                             optimizer.zero_grad()

@@ -101,7 +101,6 @@ def silence_atoms_and_shift_charge(nbforce, topology, mute, context=None):
     mute    = set(int(i) for i in mute)
     shifts  = defaultdict(lambda: 0.0*elementary_charge)   # charge → heavy atom
     nbforce.setUseDispersionCorrection(False)
-    # print(nbforce.getNonbondedMethod())
     # nbforce.setNonbondedMethod(NonbondedForce.CutoffPeriodic)
     # ------------------------------------------------------------------
     # 1. build a quick neighbour map from the Topology
@@ -123,7 +122,6 @@ def silence_atoms_and_shift_charge(nbforce, topology, mute, context=None):
             # first bonded neighbour that is NOT muted
             try:
                 parent = next(n for n in neighbours[idx] if n not in mute)
-                # print(topology.atom(parent), q)
                 shifts[parent] += q
             except StopIteration:
                 warnings.warn(f"Atom {idx} is muted but has no non-muted neighbours;"
@@ -150,7 +148,6 @@ def silence_atoms_and_shift_charge(nbforce, topology, mute, context=None):
         
         qi = nbforce.getParticleParameters(i)[0]
         qj = nbforce.getParticleParameters(j)[0]
-        # print(topology.atom(i), topology.atom(j), sigma, eps)
         if topology.atom(i).element.name == 'hydrogen' or topology.atom(j).element.name =='hydrogen':
             nbforce.setExceptionParameters(k, i, j, qi*qj, sigma, 0.0*kilojoule_per_mole)
         else:
@@ -236,7 +233,6 @@ def run_simulation(index, pdb_file, noh, save):
                             p1, p2, p3, p4, params = force_.getTorsionParameters(i)
                             if p1 in selected_atoms and p2 in selected_atoms and p3 in selected_atoms and p4 in selected_atoms:
                                 new_custom_torsion_force.addTorsion(p1, p2, p3, p4, params)
-                # print_memory_usage()
                 # Remove old forces and add the new ones
                 for fi in range(len(system.getForces()) - 1, -1, -1):
                     force_ = system.getForce(fi)
@@ -262,7 +258,6 @@ def run_simulation(index, pdb_file, noh, save):
 
             # # Create simulation
             # for i in range(Platform.getNumPlatforms()):
-            #     print(Platform.getPlatform(i).getName())
             try:
                 platform = Platform.getPlatformByName('OpenCL') if Platform.getNumPlatforms() > 1 else Platform.getPlatformByName('CPU')
             except:

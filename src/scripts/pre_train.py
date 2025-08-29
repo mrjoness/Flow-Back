@@ -342,14 +342,12 @@ for epoch in range(cur_epoch + 1, n_epochs):
                 elif solver == 'euler_ff':
                     ode_traj = euler_ff_integrator(model_wrpd, torch.tensor(prior,
                                                                 dtype=torch.float32).to(device), torch.tensor(ca_test_pos).to(device), rtp_data, lj_data, bond_data, top, device)
-            print_memory_usage()           
             # assume we're working with one structure at a time
             xyz_gens = ode_traj[-1] + ca_test_pos[0]
             xyz_ref = xyz_true[idx]
             
             
             
-            print(xyz_gens.shape, xyz_ref.shape, top.n_atoms)
             
             # need n_atoms to account for pro-dna case
             trj_gens = md.Trajectory(xyz_gens[:, :top.n_atoms], top)

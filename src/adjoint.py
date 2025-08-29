@@ -12,22 +12,6 @@ import gc
 from memory_profiler import profile
 from .utils.chi import *
 from copy import deepcopy
-# NUM_STEPS = 100
-
-# def parameter_change_norm(model, prev_params):
-#     total_norm = 0.0
-#     with torch.no_grad():
-#         for p, prev_p in zip(model.parameters(), prev_params):
-#             total_norm += torch.norm(p - prev_p, p=2).item() ** 2
-#     return total_norm ** 0.5
-
-
-# def print_memory_usage():
-    # process = psutil.Process(os.getpid())
-    # mem_info = process.memory_info()
-    # print(psutil.virtual_memory())
-    # print(f"Process RSS: {mem_info.rss / (1024 * 1024):.2f} MB")
-    # print(f"Process VMS: {mem_info.vms / (1024 * 1024):.2f} MB")
 
 rtp_data, lj_data, bond_data = get_ff_data()
 
@@ -64,7 +48,6 @@ def stochastic_trajectory(v_finetune, sigma_t, **kwargs):
         alpha_prime = 1
         t_val = t / timesteps
         with torch.no_grad():
-            # print("torch.cuda.memory_allocated: %fGB"%(torch.cuda.memory_allocated(0)/1024/1024/1024), t_val)
             if t == timesteps - 1:
                 if int_ff:
                     ff_velocity = t_val**20 * torch.stack([
@@ -89,7 +72,6 @@ def stochastic_trajectory(v_finetune, sigma_t, **kwargs):
                     ff_velocity = torch.zeros_like(x_t)
 
                 if t_val > t_flip and int_ff:
-                    # abs_pos = x + ca_pos                        # (B, N, 3)
                     chi_vel = torch.stack([chirality_fix_tensor(x_t[i] + ca_pos[0], res_maps, t_val,
                                                    k_side_init=0.4, k_oxy_init=-0.2) for i in range(x_t.shape[0])])
                     ff_velocity = ff_velocity + chi_vel         # same units: nm/ps
@@ -100,7 +82,6 @@ def stochastic_trajectory(v_finetune, sigma_t, **kwargs):
                 
             x_t = x_t + dt * drift + torch.sqrt(dt) * diffusion
             trajectory[:, t+1, :] = x_t
-    # md.Trajectory((trajectory[0, -1] + ca_pos).cpu().detach().numpy(), topology).save_pdb('world/temp.pdb')
     energy_model = EnergyModel(energy_func, topology)
     
     frame = trajectory[:, -1, :, :].requires_grad_(True) + ca_pos
@@ -133,9 +114,7 @@ def lean_adjoint_ode(X, v_base, grad, **kwargs):
     a_t = torch.zeros(batch_size, timesteps+1, n_coords * 3, device=device)
     
     a_t[:, -1, :] =  torch.clamp(lam * grad, -max_grad, max_grad)
-    # print(f'last: {torch.norm(a_t[:, -1, :]).item()}')
     for t in range(timesteps - 1, -1, -1):
-        # print("torch.cuda.memory_allocated: %fGB"%(torch.cuda.memory_allocated(0)/1024/1024/1024), t)
         alpha_t = (t+1) / timesteps
         alpha_t_dot = 1
         t_val = t / timesteps
@@ -146,10 +125,8 @@ def lean_adjoint_ode(X, v_base, grad, **kwargs):
         vjp = torch.stack([torch.autograd.functional.vjp(grad_input, xgrad[i].flatten(), a_t[i, t + 1, :])[0] for i in range(batch_size)])
         with torch.no_grad():
             a_t[:, t, :] = torch.clamp((a_t[:, t + 1, :] + dt * vjp).detach(), -max_grad, max_grad)
-            # print(f't: {t}, a_t: {torch.norm(a_t[:, t, :]).item()}')
     return a_t
     
-#@torch.no_grad()
 def adjoint_matching_loss(X, v_finetune, v_base, a_t, selected_timesteps, sigma_t, **kwargs):
     device = kwargs.get('device')
     timesteps = kwargs.get('num_steps')
@@ -157,24 +134,17 @@ def adjoint_matching_loss(X, v_finetune, v_base, a_t, selected_timesteps, sigma_
     n_coords = kwargs.get('n_coords')
     cg_noise = kwargs.get('cg_noise')
     loss = torch.tensor(0.0, device=device)
-    # print(n_coords)
     
     for k, t in enumerate(selected_timesteps):
         t_val = t / timesteps
         diff = (v_finetune(t_val, X[:, t, :, :]) - v_base(t_val, X[:, t, :, :])).view(batch_size, n_coords * 3)
         loss_t = torch.sum(torch.norm((2 / sigma_t[k]) * diff * (cg_noise ** 2) + sigma_t[k] * a_t[:, t, :], dim=1) ** 2)
-        # print(f't: {t}, Diff: {torch.norm(diff).item()}, a_t: {torch.norm(a_t[:, t, :]).item()}')
-        # print("torch.cuda.memory_allocated: %fGB"%(torch.cuda.memory_allocated(0)/1024/1024/1024), k)
-        # n_nodes, max_depth = graph_size_and_depth(loss)
-        # print(f"Autograd graph: {n_nodes} Function nodes, max depth {max_depth}")
         loss += loss_t
         
     return loss
 
 
-# @profile
 def trajectory_and_adjoint(v_base, v_finetune,  **kwargs):
-    # optimizer = kwargs.get('optimizer')
     n_coords = kwargs.get('n_coords')
     cg_noise = kwargs.get('cg_noise')
     batch_size = kwargs.get('batch_size')
@@ -182,7 +152,6 @@ def trajectory_and_adjoint(v_base, v_finetune,  **kwargs):
     device = kwargs.get('device')
     sigma_all = sigma(torch.linspace(0, 1, num_steps + 1), 1 / num_steps, cg_noise)
     xyz, energy, gradients = stochastic_trajectory(v_finetune, sigma_all, **kwargs)
-    print(energy)
     traj = xyz.view(batch_size, num_steps+1, n_coords, 3)
     a_t = lean_adjoint_ode(traj, v_base, gradients, **kwargs)
     ### Timestep selection

@@ -294,7 +294,6 @@ class EGNN_Network_time(nn.Module):
             
         else:
             pass
-            #print('No absolute pos encoding')
           
 
         # if time passed as single float or dim 0 tensor
@@ -350,10 +349,8 @@ class EGNN_Network_time(nn.Module):
         for global_attn, egnn in self.layers:
             if exists(global_attn):
                 feats, global_tokens = global_attn(feats, global_tokens, mask = mask)
-            # print(coors[0, 0], ca_pos[0, 0])
             feats, coors_real = egnn(feats, coors_real, adj_mat = adj_mat, edges = edges, mask = mask)
             # coors -= ca_pos
-            # print(coors[0, 0])
             coor_changes.append(coors_real)
 
         coors = coors_real - ca_pos
@@ -694,7 +691,6 @@ def parse_dna_3spn(dna_trj, with_pro=False):
        Ensure that dna_trj only includes dna residues
        If proteins also included in then need to add constant to ohes'''
     
-    print('init trj shape', dna_trj.xyz.shape)
     
     # seperate AA and CG components if both are included
     try:
@@ -794,7 +790,6 @@ def parse_dna_3spn(dna_trj, with_pro=False):
             xyz_com.append(b_coms)
             
             # check why not getting any b_idxs -- residue has phosphat but no b or s?
-            #print('b s p', len(b_idxs), len(s_idxs), len(p_idxs))
 
             # map to b, s, or p coms
             aa_to_cg[np.array(p_idxs)] = n_atoms + len(xyz_com) - 4
@@ -823,7 +818,6 @@ def parse_dna_3spn(dna_trj, with_pro=False):
     # if cg coords exist, replace the xyz_com values with these
     # need to change order from B-S-P to P-S-B
     if cg_trj is not None:
-        print('xyz_com', xyz_com.shape, cg_trj.xyz.shape)
         xyz_com[:, -cg_trj.xyz.shape[1]:] = cg_trj.xyz
 
     # set mask values to COMs only
@@ -874,8 +868,6 @@ class ModelWrapper(EGNN_Network_time):
         adj_mat=None
     ):
         super(EGNN_Network_time, self).__init__()  # Call the nn.Module constructor
-        # print(feats[0, :5], mask[0, :5], atom_feats[0, :5], ca_pos[0, :5])
-        # print(feats.shape, mask.shape, atom_feats.shape, ca_pos.shape)
         self.model = model
         self.feats = feats
         self.mask = mask
@@ -1068,9 +1060,6 @@ def bond_fraction(trj_ref, trj_gen, fraction=0.1):
     gen_dist = md.compute_distances(trj_gen, bond_pairs)
     np.set_printoptions(suppress=True, precision=4)
 
-    # print((ref_dist - gen_dist) / ref_dist)
-    # print(gen_dist, ref_dist)
-    # print([bond_atoms[k] for k in np.where(np.logical_not((gen_dist < (1+fraction)*ref_dist) & 
     #                    (gen_dist > (1-fraction)*ref_dist)))[1]])
     bond_frac = np.sum((gen_dist < (1+fraction)*ref_dist) & 
                        (gen_dist > (1-fraction)*ref_dist))
@@ -1107,7 +1096,6 @@ def get_res_idxs_cut(trj, thresh=0.12, Ca_cut=2.0):
         res_close = np.any(dist[0, pair_mask] < thresh)
         res_closes.append(res_close)
         # if res_close:
-        #     print(n_res, dist[0, pair_mask])
     res_closes = np.array(res_closes)
 
     return res_closes
@@ -1127,7 +1115,6 @@ def ref_rmsd(trj_ref, trj_sample_list):
     rmsd_list = []
     for i, trj_i in enumerate(trj_sample_list):
         
-        # print(trj_i.xyz.shape, trj_ref.xyz.shape)
 
         for k, (trj_if, trj_rf) in enumerate(zip(trj_i, trj_ref)):
             rmsd = md.rmsd(trj_if, trj_rf)*10
