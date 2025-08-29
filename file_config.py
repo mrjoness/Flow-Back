@@ -1,7 +1,7 @@
 import os
 
 # Get the absolute path to the parent directory of this file (the repo root)
-FLOWBACK_BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+FLOWBACK_BASE = os.path.abspath(os.path.dirname(__file__))
 
 FLOWBACK_SRC = f"{FLOWBACK_BASE}/src"
 FLOWBACK_SCRIPTS = f"{FLOWBACK_SRC}/scripts"

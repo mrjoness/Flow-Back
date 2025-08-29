@@ -220,7 +220,8 @@ if xyz_true[0].shape[0] == 1:
     xyz_true = [xyz[0] for xyz in xyz_true]
 
 loss_list = []
-rtp_data, lj_data, bond_data = get_ff_data()
+if solver == 'euler_ff':
+    rtp_data, lj_data, bond_data = get_ff_data()
 
 for epoch in range(cur_epoch + 1, n_epochs):
     ca_pos = get_ca_pos(xyz_true, load_dict['map'])
