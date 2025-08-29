@@ -1,8 +1,9 @@
 ### input directory to pdbs/trajs and return N generated samples of each ###
 import re
 import sys, os
-sys.path.append('./scripts/')
-sys.path.append('./scripts/utils/')
+from file_config import FLOWBACK_SCRIPTS, FLOWBACK_JOBDIR, FLOWBACK_DATA, FLOWBACK_OUTPUTS, FLOWBACK_MODELS
+sys.path.append(FLOWBACK_SCRIPTS)
+sys.path.append(f"{FLOWBACK_SCRIPTS}/utils")
 from collections import defaultdict
 import argparse
 import glob
@@ -20,8 +21,8 @@ def extract_numbers(filename):
     return (state_num, step_num)
     
 # need to test these for preproccessing
-from eval_utils import * 
-from energy_utils import charmm_structure_to_energy
+from eval_utils import *
+from src.energy_utils import charmm_structure_to_energy
 
 # import functions to check and correct chirality
 from chi_utils import *
@@ -30,7 +31,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--CG_noise', default=0.003, type=float, help='Noise profile to use as prior')
 parser.add_argument('--n_gens', default=2, type=int, help='N generated samples per structure')
 parser.add_argument('--solver', default='euler_ff', type=str, help='Which type of ODE solver to use')
-parser.add_argument('--model_path', default='../models/Pro_pretrained', type=str, help='Trained model')
+parser.add_argument('--model_path', default=f'{FLOWBACK_MODELS}/Pro_pretrained', type=str, help='Trained model')
 parser.add_argument('--nsteps', default=100, type=int, help='Number of steps in Euler integrator')
 parser.add_argument('--vram', default=32, type=int, help='Scale batch size to fit max gpu VRAM')
 parser.add_argument('--save_traj', action='store_true',  help='Save all flow-matching timesteps')
@@ -53,13 +54,13 @@ vram = args.vram
 
 
 
-models = glob.glob(f'jobs/{model_path}_post/state*step*.pth')
+models = glob.glob(f'{FLOWBACK_JOBDIR}/{model_path}_post/state*step*.pth')
 sorted_models = sorted(models, key=extract_numbers)
 proteins = ['chignolin', '2JOF', 'GTT', 'PRB']
 trj_dict = defaultdict(list)
 for protein in proteins:
     for frame in range(0, 2000, 200):
-        trj_dict[protein].append(f'data/{protein}_clean_AA/frame_{frame}.pdb')
+        trj_dict[protein].append(f'{FLOWBACK_DATA}/{protein}_clean_AA/frame_{frame}.pdb')
 
 energies = np.zeros((len(sorted_models), 4))
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -71,9 +72,9 @@ rtp_data, lj_data, bond_data = get_ff_data()
 for m_i, mpath in enumerate(sorted_models):
     state, step = extract_numbers(mpath)
     if np.isinf(step):
-        model = load_model(f'jobs/{model_path}_post', state, device) #, sym, pos_cos, seq_feats, seq_decay)
+        model = load_model(f'{FLOWBACK_JOBDIR}/{model_path}_post', state, device) #, sym, pos_cos, seq_feats, seq_decay)
     else:
-        model = load_model(f'jobs/{model_path}_post', f'{state}-step-{step}', device) #, sym, pos_cos, seq_feats, seq_decay)
+        model = load_model(f'{FLOWBACK_JOBDIR}/{model_path}_post', f'{state}-step-{step}', device) #, sym, pos_cos, seq_feats, seq_decay)
     for p_i, protein in enumerate(proteins):
         protein_energies = []
         for trj_name in tqdm(trj_dict[protein], desc='Iterating over trajs'):
@@ -140,4 +141,4 @@ for m_i, mpath in enumerate(sorted_models):
         energies[m_i, p_i] = np.mean(protein_energies)
     
 
-np.save(f'validation_{model_path}.npy', energies)
+np.save(f'{FLOWBACK_OUTPUTS}/validation_{model_path}.npy', energies)

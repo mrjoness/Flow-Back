@@ -19,11 +19,13 @@ import math
 import openmm
 import re
 from scipy.spatial import cKDTree
-from egnn_pytorch_se3.egnn_pytorch import EGNN_SE3, EGNN
+from .egnn_pytorch_se3.egnn_pytorch import EGNN_SE3, EGNN
 import pandas as pd
 from joblib import Parallel, delayed            # NEW!
-from scripts.utils.chi_utils import *
 from file_config import *
+import sys
+sys.path.append(f"{FLOWBACK_SCRIPTS}/utils")
+from chi_utils import *
 se3_avail = True
     
 

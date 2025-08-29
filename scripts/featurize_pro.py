@@ -3,6 +3,7 @@ import mdtraj as md
 import pickle as pkl
 import argparse
 from utils.egnn_utils import get_pro_ohes, get_aa_to_cg
+from file_config import FLOWBACK_INPUTS
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--pdb_dir', type=str, help='Load pdbs from this dir')
@@ -59,7 +60,7 @@ for pdb in pdb_list:
         print(cnt)                    
               
 save_dict = {'res':res_list,'atom':atom_list,'xyz':xyz_list,'mask':mask_list,'map':aa_to_cg_list}
-pkl.dump(save_dict, open(f'../train_features/feats_{args.save_name}.pkl', 'wb'))
+pkl.dump(save_dict, open(f'{FLOWBACK_INPUTS}/train_features/feats_{args.save_name}.pkl', 'wb'))
 
 if args.collect_tops:
-    pkl.dump(top_list, open(f'../train_features/tops_{args.save_name}.pkl', 'wb'))
+    pkl.dump(top_list, open(f'{FLOWBACK_INPUTS}/train_features/tops_{args.save_name}.pkl', 'wb'))

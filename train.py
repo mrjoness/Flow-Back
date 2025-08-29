@@ -1,5 +1,6 @@
-from utils import *
-from conditional_flow_matching import ConditionalFlowMatcher
+from src.utils import *
+from src.conditional_flow_matching import ConditionalFlowMatcher
+from file_config import FLOWBACK_JOBDIR, FLOWBACK_INPUTS
 import argparse
 import pickle as pkl
 from torch.optim.lr_scheduler import StepLR
@@ -88,15 +89,15 @@ else: msk_txt = ''
 #new_txt = f'{sym}-{sym_rep}{msk_txt}_cos-emb-{pos_cos}'
 new_txt = f'{sym}-{sym_rep}_seq-feats-{seq_feats}_seq-decay-{int(seq_decay)}_act-{act}_clip-{grad_clip}'
 
-job_dir = f'./jobs/{system}_{new_txt}_{loss_type}_m-{mdim}_dim-{dim}_nn-{num_nearest_neighbors}_depth-{depth}_eps-{n_epochs}_sigma-{sigma}_CG-noise-{Ca_std}_lr-{lr}'
+job_dir = f"{FLOWBACK_JOBDIR}/{system}_{new_txt}_{loss_type}_m-{mdim}_dim-{dim}_nn-{num_nearest_neighbors}_depth-{depth}_eps-{n_epochs}_sigma-{sigma}_CG-noise-{Ca_std}_lr-{lr}"
 os.makedirs(job_dir, exist_ok=True)
 
 # load different systems with max_atoms and encoding dim to ensure features will fit
 
 if system == 'pro':
     if load_path == 'default':
-        load_dict = pkl.load(open('./train_features/feats_pro_0-1000_all_max-8070.pkl', 'rb')) 
-        top_list = pkl.load(open('./train_features/tops_pro_0-1000_all.pkl', 'rb'))
+        load_dict = pkl.load(open(f"{FLOWBACK_INPUTS}/train_features/feats_pro_0-1000_all_max-8070.pkl", 'rb'))
+        top_list = pkl.load(open(f"{FLOWBACK_INPUTS}/train_features/tops_pro_0-1000_all.pkl", 'rb'))
     else:
         load_dict = pkl.load(open(load_path, 'rb')) 
         top_list= pkl.load(open(top_path, 'rb')) 
@@ -107,15 +108,15 @@ if system == 'pro':
     atom_dim = 37
     
     # load idxs of training and validation pdbs (features)
-    train_idxs = np.load(f'./train_features/idxs_train_pro.npy')[:max_train]
-    valid_idxs = np.load(f'./train_features/idxs_valid_pro.npy')[:max_val]
+    train_idxs = np.load(f"{FLOWBACK_INPUTS}/train_features/idxs_train_pro.npy")[:max_train]
+    valid_idxs = np.load(f"{FLOWBACK_INPUTS}/train_features/idxs_valid_pro.npy")[:max_val]
     
     #print('train_idx', train_idxs[:10], train_idxs[-10:])
     #print('valid_idxs', valid_idxs)
     
 elif system == 'DNApro':
     if load_path == 'default':
-        load_dict = pkl.load(open('./train_features/feats_DNAPro_DNA-range_10-120_pro-range_10-500.pkl', 'rb'))
+        load_dict = pkl.load(open(f"{FLOWBACK_INPUTS}/train_features/feats_DNAPro_DNA-range_10-120_pro-range_10-500.pkl", 'rb'))
     else:
         load_dict = pkl.load(open(load_path, 'rb')) 
         
@@ -124,8 +125,8 @@ elif system == 'DNApro':
     atom_dim = 68    # make sure to fit all pro + dna atom types
 
     # obtained from mmseqs on DNA and pro sequences
-    train_idxs = np.load(f'./train_features/idxs_train_DNAPro.npy')[:]
-    valid_idxs = np.load(f'./train_features/idxs_valid_DNAPro.npy')
+    train_idxs = np.load(f"{FLOWBACK_INPUTS}/train_features/idxs_train_DNAPro.npy")[:]
+    valid_idxs = np.load(f"{FLOWBACK_INPUTS}/train_features/idxs_valid_DNAPro.npy")
 
 # save hyperparams to pkl to reload model
 params_dict = { 'depth': depth,

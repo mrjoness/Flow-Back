@@ -1,8 +1,9 @@
 ### input directory to pdbs/trajs and return N generated samples of each ###
 
 import sys, os
-sys.path.append('../')
-sys.path.append('./utils/')
+from file_config import FLOWBACK_SRC, FLOWBACK_SCRIPTS, FLOWBACK_OUTPUTS, FLOWBACK_DATA, FLOWBACK_MODELS
+sys.path.append(FLOWBACK_SRC)
+sys.path.append(f"{FLOWBACK_SCRIPTS}/utils")
 
 import argparse
 import glob
@@ -29,7 +30,7 @@ parser.add_argument('--check_bonds', action='store_true',  help='Calculate bond 
 parser.add_argument('--check_div', action='store_true',  help='Calculate diversity score (for multi-gen)')
 parser.add_argument('--mask_prior', action='store_true',  help='Enforce CG positions remain the same')
 parser.add_argument('--retain_AA', action='store_true',  help='Hold AA positions for scoring')
-parser.add_argument('--model_path', default='../models/Pro_pretrained', type=str, help='Trained model')
+parser.add_argument('--model_path', default=f'{FLOWBACK_MODELS}/Pro_pretrained', type=str, help='Trained model')
 parser.add_argument('--tolerance', default=3e-5, type=float, help='Tolerance if using NN solver')
 parser.add_argument('--nsteps', default=100, type=int, help='Number of steps in Euler integrator')
 parser.add_argument('--system', default='pro', type=str, help='Pro or DNAPro CG input')
@@ -63,8 +64,8 @@ vram = args.vram
 save_traj = args.save_traj
 save_dcd = args.save_dcd
 
-save_dir = f'../outputs/{load_dir}'
-load_dir = f'../data/{load_dir}'
+save_dir = f'{FLOWBACK_OUTPUTS}/{load_dir}'
+load_dir = f'{FLOWBACK_DATA}/{load_dir}'
 
 # remove mask and nsteps to simplify naming
 if solver == 'euler':
