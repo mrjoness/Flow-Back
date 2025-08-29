@@ -11,7 +11,6 @@ from typing import Union
 
 import torch
 
-#from .optimal_transport import OTPlanSampler   # MJ remove this to enable multi-gpu training
 
 
 def pad_t_like_x(t, x):

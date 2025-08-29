@@ -16,15 +16,80 @@ from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
 from itertools import islice, count
 import math
-
-#try:
+import openmm
+import re
+from scipy.spatial import cKDTree
 from egnn_pytorch_se3.egnn_pytorch import EGNN_SE3, EGNN
+import pandas as pd
+from joblib import Parallel, delayed            # NEW!
+from scripts.utils.chi_utils import *
+from file_config import *
 se3_avail = True
     
-# except:
-#     from egnn_pytorch import EGNN
-#     se3_avail = False
-#     print('using egnn_pytorch standard')
+
+RES_MAP = {
+    "ALA": 1,  # Alanine
+    "ARG": 2,  # Arginine
+    "ASN": 3,  # Asparagine
+    "ASP": 4,  # Aspartic acid
+    "CYS": 5,  # Cysteine
+    "GLU": 6,  # Glutamic acid
+    "GLN": 7,  # Glutamine
+    "GLY": 8,  # Glycine
+    "HIS": 9,  # Histidine
+    "ILE": 10, # Isoleucine
+    "LEU": 11, # Leucine
+    "LYS": 12, # Lysine
+    "MET": 13, # Methionine
+    "PHE": 14, # Phenylalanine
+    "PRO": 15, # Proline
+    "SER": 16, # Serine
+    "THR": 17, # Threonine
+    "TRP": 18, # Tryptophan
+    "TYR": 19, # Tyrosine
+    "VAL": 20  # Valine
+}
+
+ATOM_MAP = atom_types = {
+        'C':1,
+        'CA':2,
+        'CB':3,
+        'CD':4,
+        'CD1':5,
+        'CD2':6,
+        'CE':7,
+        'CE1':8,
+        'CE2':9,
+        'CE3':10,
+        'CG':11,
+        'CG1':12,
+        'CG2':13,
+        'CH2':14,
+        'CZ':15,
+        'CZ2':16,
+        'CZ3':17,
+        'N':18,
+        'ND1':19,
+        'ND2':20,
+        'NE':21,
+        'NE1':22,
+        'NE2':23,
+        'NH1':24,
+        'NH2':25,
+        'NZ':26,
+        'O':27,
+        'OD1':28,
+        'OD2':29,
+        'OE1':30,
+        'OE2':31,
+        'OG':32,
+        'OG1':33,
+        'OH':34,
+        'SD':35,
+        'SG':36,
+}
+
+
 
 def exists(val):
     return val is not None
@@ -129,6 +194,7 @@ class EGNN_Network_time(nn.Module):
         time_dim=0, 
         res_dim=20,  # change to 21
         atom_dim=3,  # change to 5
+        esm_dim=1280,
         sym='e3',
         **kwargs    # MJ -- include seq_features, and seq_decay in kwargs
     ):
@@ -139,7 +205,8 @@ class EGNN_Network_time(nn.Module):
         
         self.res_emb = nn.Embedding(res_dim, dim)
         self.atom_emb = nn.Embedding(atom_dim, dim)
-        #self.time_emb = nn.Embedding(1, dim)
+        # self.esm_emb = nn.Linear(esm_dim, dim)
+        # self.time_emb = nn.Embedding(1, dim)
 
         self.token_emb = nn.Embedding(num_tokens, dim) if exists(num_tokens) else None
         self.pos_emb = nn.Embedding(num_positions, dim) if exists(num_positions) else None
@@ -193,8 +260,10 @@ class EGNN_Network_time(nn.Module):
         self,
         feats,
         coors,
+        ca_pos,
         time,
         atom_feats=None,
+        esm_feats=None,
         adj_mat = None,
         edges = None,
         mask = None,
@@ -208,12 +277,15 @@ class EGNN_Network_time(nn.Module):
         if atom_feats != None:
             feats += self.atom_emb(atom_feats)
 
+        # if esm_feats != None:
+        #     feats += self.esm_emb(esm_feats)
         if exists(self.pos_emb):
             n = feats.shape[1]
             assert n <= self.num_positions, f'given sequence length {n} must be less than the number of positions {self.num_positions} set at init'
             pos_emb = self.pos_emb(torch.arange(n, device = device))
             feats += rearrange(pos_emb, 'n d -> () n d')
 
+        
         # don't use both the linear and cos embeddings
         elif exists(self.emb_cos_scale):
             n, dim = feats.shape[1], feats.shape[2]
@@ -239,7 +311,7 @@ class EGNN_Network_time(nn.Module):
         # use a time embedding MLP
         if self.time_dim > 0:
             time = self.time_net(time)
-            
+
         feats += time
 
         if exists(edges) and exists(self.edge_emb):
@@ -272,21 +344,25 @@ class EGNN_Network_time(nn.Module):
         if exists(self.global_tokens):
             global_tokens = repeat(self.global_tokens, 'n d -> b n d', b = b)
             
-        # go through layers
 
-        coor_changes = [coors]
-
+        coors_real = coors + ca_pos
+        coor_changes = [coors_real]
         for global_attn, egnn in self.layers:
             if exists(global_attn):
                 feats, global_tokens = global_attn(feats, global_tokens, mask = mask)
+            # print(coors[0, 0], ca_pos[0, 0])
+            feats, coors_real = egnn(feats, coors_real, adj_mat = adj_mat, edges = edges, mask = mask)
+            # coors -= ca_pos
+            # print(coors[0, 0])
+            coor_changes.append(coors_real)
 
-            feats, coors = egnn(feats, coors, adj_mat = adj_mat, edges = edges, mask = mask)
-            coor_changes.append(coors)
-
+        coors = coors_real - ca_pos
         if return_coor_changes:
             return feats, coors, coor_changes
 
         return feats, coors
+
+# def LJ_velocities(feats, coors)
     
 def get_adj_mat(top):
 
@@ -321,6 +397,8 @@ def get_adj_CG(xyz, mask_idxs, cut=1.0):
     adj_mat = torch.tensor(adj_mat, dtype=torch.bool)
     return adj_mat
 
+def sig(t, dt, cg_noise):
+    return cg_noise * torch.sqrt((2 * (1 - t + dt)) / (t + dt))
     
 def get_aa_to_cg(top, msk):
     '''Mapping between AA and CG
@@ -333,7 +411,15 @@ def get_aa_to_cg(top, msk):
         
     return np.array(aa_to_cg)
 
-
+def get_ca_pos(xyz, aa_to_cg):
+    '''Ca positions of every atom'''
+    xyz_ca = []
+    for xyz_ref, map_ref in zip(xyz, aa_to_cg):
+        xyz_ca_i = xyz_ref[map_ref]
+        xyz_ca.append(xyz_ca_i)
+    
+    return xyz_ca
+    
 def get_prior(xyz, aa_to_cg, mask_idxs=None, scale=1.0, frames=None):
     '''Normally distribute around respective Ca center of mass'''
     
@@ -381,6 +467,8 @@ def get_prior_mask(xyz, aa_to_cg, masks=None, scale=1.0):
     
     return xyz_prior
 
+
+
     
 def str_to_ohe(string_list):
     unique_strings = list(set(string_list))
@@ -417,55 +505,53 @@ class CustomDataset(Dataset):
         sample2 = torch.tensor(self.data_list2[index], dtype=torch.float32)
 
         return sample1, sample2
-    
+
+
 # load data set
-class FeatureDataset(Dataset):
-    def __init__(self, data_list1, data_list2, data_list3, data_list4, data_list5, data_list6):
-        self.data_list1 = data_list1
-        self.data_list2 = data_list2
-        self.data_list3 = data_list3
-        self.data_list4 = data_list4
-        self.data_list5 = data_list5
-        self.data_list6 = data_list6
+class StructureDataset(Dataset):
+    def __init__(self, xyz_diff, xyz_prior, res_feats, atom_feats, ca_pos, mask):
+        self.xyz_diff = xyz_diff
+        self.xyz_prior = xyz_prior
+        self.res_feats = res_feats
+        self.atom_feats = atom_feats
+        self.ca_pos = ca_pos
+        self.mask = mask
 
     def __len__(self):
-        return len(self.data_list1)  # Assuming both lists have the same length
+        return len(self.xyz_diff)  # Assuming both lists have the same length
 
     def __getitem__(self, index):
-        sample1 = torch.tensor(self.data_list1[index], dtype=torch.float32)
-        sample2 = torch.tensor(self.data_list2[index], dtype=torch.float32)
-        sample3 = torch.tensor(self.data_list3[index], dtype=torch.int)
-        sample4 = torch.tensor(self.data_list4[index], dtype=torch.int)
-        sample5 = torch.tensor(self.data_list5[index], dtype=torch.bool)
-        sample6 = torch.tensor(self.data_list6[index], dtype=torch.bool)
-
+        sample1 = torch.tensor(self.xyz_diff[index], dtype=torch.float32)
+        sample2 = torch.tensor(self.xyz_prior[index], dtype=torch.float32)
+        sample3 = torch.tensor(self.res_feats[index], dtype=torch.int)
+        sample4 = torch.tensor(self.atom_feats[index], dtype=torch.int)
+        sample5 = torch.tensor(self.ca_pos[index], dtype=torch.float32)
+        sample6 = torch.tensor(self.mask[index], dtype=torch.bool)
+        
         return sample1, sample2, sample3, sample4, sample5, sample6
-    
+
+class PostTrainDataset(Dataset):
+    def __init__(self, res_feats, atom_feats, ca_pos, mask):
+        self.res_feats = res_feats
+        self.atom_feats = atom_feats
+        self.ca_pos = ca_pos
+        self.mask = mask
+
+    def __len__(self):
+        return len(self.res_feats)  # Assuming both lists have the same length
+
+    def __getitem__(self, index):
+        sample1 = torch.tensor(self.res_feats[index], dtype=torch.int)
+        sample2 = torch.tensor(self.atom_feats[index], dtype=torch.int)
+        sample3 = torch.tensor(self.ca_pos[index], dtype=torch.float32)
+        sample4 = torch.tensor(self.mask[index], dtype=torch.bool)
+        
+        return sample1, sample2, sample3, sample4
+
     
 def pro_res_to_ohe(string_list):
     
-    amino_acids = {
-    "ALA": 1,  # Alanine
-    "ARG": 2,  # Arginine
-    "ASN": 3,  # Asparagine
-    "ASP": 4,  # Aspartic acid
-    "CYS": 5,  # Cysteine
-    "GLU": 6,  # Glutamic acid
-    "GLN": 7,  # Glutamine
-    "GLY": 8,  # Glycine
-    "HIS": 9,  # Histidine
-    "ILE": 10, # Isoleucine
-    "LEU": 11, # Leucine
-    "LYS": 12, # Lysine
-    "MET": 13, # Methionine
-    "PHE": 14, # Phenylalanine
-    "PRO": 15, # Proline
-    "SER": 16, # Serine
-    "THR": 17, # Threonine
-    "TRP": 18, # Tryptophan
-    "TYR": 19, # Tyrosine
-    "VAL": 20  # Valine
-    }
+    amino_acids = RES_MAP
 
     indices = [amino_acids[string] for string in string_list]
     return np.array(indices)
@@ -482,52 +568,22 @@ def pro_atom_to_ohe(string_list):
     indices = [atom_types[string] for string in string_list]
     return np.array(indices)
 
-def pro_allatom_to_ohe(string_list):
-    '''List all possible atom names'''
-    
-    atom_types = {
-        'C':1,
-        'CA':2,
-        'CB':3,
-        'CD':4,
-        'CD1':5,
-        'CD2':6,
-        'CE':7,
-        'CE1':8,
-        'CE2':9,
-        'CE3':10,
-        'CG':11,
-        'CG1':12,
-        'CG2':13,
-        'CH2':14,
-        'CZ':15,
-        'CZ2':16,
-        'CZ3':17,
-        'N':18,
-        'ND1':19,
-        'ND2':20,
-        'NE':21,
-        'NE1':22,
-        'NE2':23,
-        'NH1':24,
-        'NH2':25,
-        'NZ':26,
-        'O':27,
-        'OD1':28,
-        'OD2':29,
-        'OE1':30,
-        'OE2':31,
-        'OG':32,
-        'OG1':33,
-        'OH':34,
-        'SD':35,
-        'SG':36
-    }
+def pro_allatom_to_ohe(string_list):    
+    atom_types = ATOM_MAP
   
     indices = [atom_types[string] for string in string_list]
     return np.array(indices)
 
+def pro_ohe_to_allatom(ohe_list):
+    inv_atom_map = {v: k for k, v in ATOM_MAP.items()}
+    strings = [inv_atom_map[key] for key in ohe_list]
+    return np.array(strings)
 
+def pro_ohe_to_res(ohe_list):
+    inv_atom_map = {v: k for k, v in RES_MAP.items()}
+    strings = [inv_atom_map[key] for key in ohe_list]
+    return np.array(strings)
+    
 def get_pro_ohes(top):
     '''get one-hot encodings of residue and atom element identities'''
     
@@ -812,25 +868,31 @@ class ModelWrapper(EGNN_Network_time):
         model,
         feats,
         mask,
+        ca_pos,
         atom_feats=None,
+        esm_feats=None,
         adj_mat=None
     ):
         super(EGNN_Network_time, self).__init__()  # Call the nn.Module constructor
-    
+        # print(feats[0, :5], mask[0, :5], atom_feats[0, :5], ca_pos[0, :5])
+        # print(feats.shape, mask.shape, atom_feats.shape, ca_pos.shape)
         self.model = model
         self.feats = feats
         self.mask = mask
         self.atom_feats = atom_feats
-        self.adj_mat = adj_mat
+        self.esm_feats = esm_feats
+        self.ca_pos = ca_pos
         
     def forward(self, t, x, y=None, *args, **kwargs):
         
         feats_out, coors_out = self.model(self.feats, x, mask=self.mask, time=t,
-                                    atom_feats=self.atom_feats, adj_mat=self.adj_mat)
+                                    atom_feats=self.atom_feats, esm_feats=self.esm_feats, ca_pos=self.ca_pos)
         return coors_out - x
     
+
+
 # add custom integrators
-def euler_integrator(model, x, nsteps=100, mask=None, noise=0.0):
+def euler_integrator(model, x, nsteps=100, mask=None, noise=False):
     
     # try adding small amounts of noise during integration
     
@@ -843,19 +905,136 @@ def euler_integrator(model, x, nsteps=100, mask=None, noise=0.0):
         with torch.no_grad():
             dx_dt = model(t, x.detach())
 
-        # Compute the next state using Euler's formula
-        x = (x + dx_dt * dt).detach()
         
+
         # add some noise to model sde (except for masked values)
-        if mask != None:
-            masked_noise = mask*noise*torch.randn(mask.shape).to(device)
-            masked_noise = masked_noise.unsqueeze(-1).expand(-1, -1, 3)
-            x += masked_noise
         
+        # if noise:
+        #     drift = 2 * dx_dt - (1/(t+dt)) * x
+        #     diffusion = sig(torch.tensor(t), dt, noise_amt) * torch.randn_like(x)
+        #     x = (x + drift * dt + diffusion * torch.sqrt(torch.tensor(dt))).detach()
+        # else:
+            # Compute the next state using Euler's formula
+        x = (x + dx_dt * dt).detach()
         # track each update to show diffusion path
         ode_list.append(x.cpu().numpy())
 
     return np.array(ode_list)
+
+
+
+
+def euler_ff_integrator(model, x, ca_pos, rtp_data, lj_data, bond_data, top, device, nsteps=100, t_flip=0.55, mask=None, alpha=20):
+    # Try adding small amounts of noise during integration
+    ode_list = []
+    dt = 1.0 / (nsteps - 1)
+
+    chi_list = []
+    chiral_flipped = False
+    
+    
+   
+
+    n_real = top.n_atoms
+    device = x.device
+
+    res_maps = build_residue_maps(top)
+    
+    for t in np.linspace(0, 1, nsteps):
+      
+        
+
+        with torch.no_grad():
+            dx_dt = model(t, x.detach())
+        # Compute Lennard-Jones force contribution
+        
+        if t < 0.85:
+            ff_velocity = torch.zeros_like(x).to(device)
+            
+        else:
+            if t < 0.95:
+                ff_velocity = 0.1 * t**alpha * torch.stack([torch.clamp(lj_velocity_fn(x[i:i+1] + ca_pos, t, rtp_data, lj_data, dt, top, device), -5, 5) 
+                                                        for i in range(x.shape[0])])
+
+                        
+            else:
+                ff_velocity = t**alpha * torch.stack([
+                    0.1 * torch.clamp(lj_velocity_fn(x[i:i+1] + ca_pos, t, rtp_data, lj_data, dt, top, device), -5, 5) +
+                    torch.clamp(bond_velocity_fn(x[i:i+1] + ca_pos, t, rtp_data, bond_data, dt, top, device), -1, 1)
+                    for i in range(x.shape[0])
+                ])
+
+        if t >= t_flip:
+        # if t >= t_flip and t < t_flip + 0.25:
+            # abs_pos = x + ca_pos                        # (B, N, 3)
+            chi_vel = torch.stack([chirality_fix_tensor(x[i] + ca_pos[0], res_maps, t,
+                                           k_side_init=0.4, k_oxy_init=-0.2) for i in range(x.shape[0])])
+            ff_velocity = ff_velocity + chi_vel         # same units: nm/ps
+
+            
+      
+              
+        x = (x + (dx_dt + ff_velocity) * dt).detach()
+        
+        
+        # Track each update to show diffusion path
+        ode_list.append(x.cpu().numpy())
+        
+        
+    return np.array(ode_list)
+
+def lj_velocity_fn(x, t, rtp_data, lj_data, dt, top, device, CUTOFF=0.42):
+    """Compute Lennard-Jones force given positions, epsilon, and sigma."""
+    residues = [top.atom(i).residue.name for i in range(top.n_atoms)]
+    atoms = [top.atom(i).name for i in range(top.n_atoms)]
+    res_idxs = [top.atom(i).residue.resSeq for i in range(top.n_atoms)]
+    lj_list = [get_atom_lj(rtp_data, lj_data, residues[i], atoms[i]) for i in range(len(atoms))]
+    close_pairs = find_close_pairs(x[0].cpu().numpy(), CUTOFF)
+    velocities = torch.zeros(len(atoms), 3).to(device)
+    for i, j, dist in close_pairs:
+        if res_idxs[i] != res_idxs[j] and not ((res_idxs[i] == res_idxs[j] - 1 or res_idxs[i] == res_idxs[j] + 1) and atoms[i] in ["C", "N", "O", "CA"] and atoms[j] in ["C", "N", "O", "CA"]):
+            mass_i, sigma_i, epsilon_i = lj_list[i]
+            mass_j, sigma_j, epsilon_j = lj_list[j]
+            if np.abs(res_idxs[i] - res_idxs[j]) < 3:
+                sigma = t * (sigma_i + sigma_j) / 2 # Nearby residues are typically growing away from each other, so will be intentionally closer at lower t. t provides correction here.
+            else:
+                sigma = (sigma_i + sigma_j) / 2  # Instead of fetching a precomputed sigma
+            epsilon = (epsilon_i * epsilon_j) ** 0.5  # Instead of a single epsilon lookup
+            
+            inv_r2 = 1.0 / (dist ** 2)
+            inv_r6 = inv_r2 ** 3
+            inv_r12 = inv_r6 ** 2
+            
+            F_LJ = 24 * epsilon * inv_r2 * (2 * (sigma ** 12) * inv_r12 - (sigma ** 6) * inv_r6)
+            force = F_LJ * (x[0, i] - x[0, j])  # Compute force vector
+    
+            velocities[i] += (force / mass_i) * dt
+            velocities[j] -= (force / mass_j) * dt
+     
+    return velocities
+
+
+
+def bond_velocity_fn(x, t, rtp_data, bond_data, dt, top, device):
+    
+    residues = [top.atom(i).residue.name for i in range(top.n_atoms)]
+    atoms = [top.atom(i).name for i in range(top.n_atoms)]
+    res_idxs = [top.atom(i).residue.resSeq for i in range(top.n_atoms)]
+    velocities = torch.zeros(len(atoms), 3).to(device)
+    for bond in top.bonds:
+        if bond[0].element.name != 'sulfur' or bond[1].element.name != 'sulfur':
+            i = bond[0].index
+            j = bond[1].index
+            
+            b0, kb, mass_i, mass_j = get_bond_info(rtp_data, bond_data, bond)
+            r_ij = x[0, i] - x[0, j]
+            bond_length = torch.norm(r_ij).item()
+            F_b = kb * (bond_length - (b0 * t))
+            force = F_b * r_ij
+            velocities[i] -= (force / mass_i) * dt
+            velocities[j] += (force / mass_j) * dt
+
+    return velocities
 
 def runge_kutta_integrator(model, x, nsteps=50):
     '''Runge Kutta 4th order solver (takes ~4x longer per-step compated to Euler)'''
@@ -878,14 +1057,21 @@ def runge_kutta_integrator(model, x, nsteps=50):
 
     return np.array(ode_list)
 
-    
+
+
+
 def bond_fraction(trj_ref, trj_gen, fraction=0.1):
     '''Fraction of bonds within X percent of the reference'''
-
     bond_pairs = [[b[0].index, b[1].index] for b in trj_ref.top.bonds]
+    bond_atoms = [[b[0], b[1]] for b in trj_ref.top.bonds]
     ref_dist = md.compute_distances(trj_ref, bond_pairs)
     gen_dist = md.compute_distances(trj_gen, bond_pairs)
+    np.set_printoptions(suppress=True, precision=4)
 
+    # print((ref_dist - gen_dist) / ref_dist)
+    # print(gen_dist, ref_dist)
+    # print([bond_atoms[k] for k in np.where(np.logical_not((gen_dist < (1+fraction)*ref_dist) & 
+    #                    (gen_dist > (1-fraction)*ref_dist)))[1]])
     bond_frac = np.sum((gen_dist < (1+fraction)*ref_dist) & 
                        (gen_dist > (1-fraction)*ref_dist))
 
@@ -906,7 +1092,6 @@ def get_res_idxs_cut(trj, thresh=0.12, Ca_cut=2.0):
         for j in range(i-1):
             if np.linalg.norm(Ca_xyzs[i]-Ca_xyzs[j]) < Ca_cut:
                 pairs.append((i, j))
-                
     dist, pairs = md.compute_contacts(trj, contacts=pairs, scheme='closest')
     # look at sidechain-heavy only
     
@@ -921,7 +1106,10 @@ def get_res_idxs_cut(trj, thresh=0.12, Ca_cut=2.0):
         pair_mask = np.array([n_res in i for i in pairs])
         res_close = np.any(dist[0, pair_mask] < thresh)
         res_closes.append(res_close)
+        # if res_close:
+        #     print(n_res, dist[0, pair_mask])
     res_closes = np.array(res_closes)
+
     return res_closes
 
 def clash_res_percent(viz_gen, thresh=0.12, Ca_cut=2.0):
@@ -939,7 +1127,7 @@ def ref_rmsd(trj_ref, trj_sample_list):
     rmsd_list = []
     for i, trj_i in enumerate(trj_sample_list):
         
-        print(trj_i.xyz.shape, trj_ref.xyz.shape)
+        # print(trj_i.xyz.shape, trj_ref.xyz.shape)
 
         for k, (trj_if, trj_rf) in enumerate(zip(trj_i, trj_ref)):
             rmsd = md.rmsd(trj_if, trj_rf)*10
@@ -1045,7 +1233,98 @@ def reformat_pro_dna(load_name, save_name):
     io = PDBIO()
     io.set_structure(structure)
     io.save(save_name)
+
+
+def read_rtp_file(file_path):
+    with open(file_path, 'r') as file:
+        rtp_data = file.readlines()  # Read the file as a list of lines
+    return rtp_data
+
+
+def parse_rtp(rtp_data):
+    rtp_dict = {}
+    residue_type = None
+    atom_dict = {}
     
+    # Process each line in the RTP data
+    for line in rtp_data:
+        line = line.strip()
+        
+        # If a new residue type is found, initialize a new dictionary for it
+        residue_match = re.match(r"\[\s*[A-Z0-9]*\s*\]", line)
+        if residue_match:
+            if residue_type:  # If there is an existing residue, save it before moving on
+                rtp_dict[residue_type] = atom_dict
+            
+            residue_type = residue_match.group(0)[2:-2]
+            atom_dict = {}
+            reading_atoms = True  # Start reading atoms
+        # Process atoms section (inside [ atoms ] block)
+        elif residue_type and re.match(r"\[ atoms \]", line):
+            # Start reading atoms after "[ atoms ]" section header
+            continue
+        elif re.match(r"\[ bonds \]", line) or re.match(r"\[ impropers \]", line) or re.match(r"\[ cmap \]", line) or re.match(r"\[ bondedtypes \]", line):
+            # Stop reading when the "[ bonds ]" section is reached
+            reading_atoms = False
+            continue
+        elif residue_type and reading_atoms:
+            # Parse atom data line
+            parts = line.split()
+            if len(parts) >= 2:
+                atom_name = parts[0]
+                atom_type = parts[1]
+                if atom_name.isupper() and atom_type.isupper():
+                    atom_dict[atom_name] = atom_type
+
+    # Don't forget to add the last residue type to the dictionary
+    if residue_type:
+        rtp_dict[residue_type] = atom_dict
     
-   
+    return rtp_dict
+
+def get_ff_data(rtp_path=f'{FLOWBACK_FF}/aminoacids.rtp', nb_path=f'{FLOWBACK_FF}/ffnonbonded.csv', bond_path=f'{FLOWBACK_FF}/bondtypes.csv'):
+    rtp_lines = read_rtp_file(rtp_path)
+    rtp_data = parse_rtp(rtp_lines)
+    lj_data = pd.read_csv(nb_path, sep='\t', comment=';')
+    bond_data = pd.read_csv(bond_path, sep='\t', comment=';')
+    return rtp_data, lj_data, bond_data
+    
+
+def get_atom_lj(rtp_data, lj_data, residue, atom):
+    atom_type = rtp_data[residue][atom]
+    row =  lj_data[lj_data['name'] == atom_type]
+    return row['mass'].values[0], row['sigma'].values[0], row['epsilon'].values[0]
+    
+def get_bond_info(rtp_data, bond_data, bond):
+    i_name = bond[0].name
+    j_name = bond[1].name
+    i_res = bond[0].residue.name
+    j_res = bond[1].residue.name
+    mass_i = bond[0].element.mass
+    mass_j = bond[1].element.mass
+    i_type = rtp_data[i_res][i_name]
+    j_type = rtp_data[j_res][j_name]
+    bond_row = bond_data[(bond_data['i'] == i_type) & (bond_data['j'] == j_type)]
+    if len(bond_row) == 0:
+        bond_row = bond_data[(bond_data['j'] == i_type) & (bond_data['i'] == j_type)]
+    return bond_row['b0'].iloc[0], bond_row['kb'].iloc[0], mass_i, mass_j
+        
+def find_close_pairs(positions, CUTOFF):
+    """
+    Finds pairs of points within CUTOFF distance of each other.
+
+    Parameters:
+        positions (np.ndarray): Array of shape (N, D) containing N points in D-dimensional space.
+        CUTOFF (float): Distance threshold.
+
+    Returns:
+        list of tuple: Pairs of indices (i, j) where distance between points[i] and points[j] < CUTOFF.
+    """
+    tree = cKDTree(positions)
+    pairs = tree.query_pairs(CUTOFF)
+    pair_dists = [(i, j, np.linalg.norm(positions[i] - positions[j])) for i, j in pairs]
+    return pair_dists
+
+def atom_to_steps(n_atoms):
+    return int(np.floor((21.28 - 0.00105 * n_atoms) / (0.0007 * n_atoms)))
     
