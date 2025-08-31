@@ -1,0 +1,40 @@
+load_dir: "1FME 2WAV lambda NTL9 chignolin 2JOF NuG2 UVF A3D" # Path to input pdbs -- Can be AA or CG
+CG_noise: 0.003  # Noise profile to use as prior
+ckp: 15  # Checkpoint for given mode
+n_gens: 1  # N generated samples per structure
+stride: 1  # Stride applied to trajectories
+batch: 1 # Worst-case batch size
+evalf: 10
+
+mask_prior: False  # Enforce CG positions remain the same
+retain_AA: False  # Hold AA positions for scoring
+
+model_path: "models/pre_train"  # Trained model
+nsteps: 100  # Number of steps in Euler integrator
+n_epochs: 20  # Number of epochs to train for
+
+lr: 0.00001 # Learning Rate
+wdecay: 0.0  # Weight Decay
+grad_clip: 0.0  # Gradient Clipping
+
+vram: 16  # Scale batch size to fit max GPU VRAM
+
+n_samples: 100
+
+#load_path: 'train_features/feats_chignolin.pkl'
+#top_path: 'train_features/tops_chignolin.pkl'
+num_steps: 100
+selection_split: 0.8
+
+lam: 0.01
+
+save_dir: 'adjoint'
+acc_grad_batch: 16
+max_grad: 20
+#pdb_list: /project2/andrewferguson/berlaga/Flow-Back/data/train/under_50.txt
+pdb_list: 'default'
+ff: 'CHARMM'
+restart: False
+int_ff: True
+t_flip: 0.25
+# restart_ckp: 1

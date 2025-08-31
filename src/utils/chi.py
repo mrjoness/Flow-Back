@@ -328,3 +328,97 @@ def euler_integrator_chi_check(model, x, nsteps=100, x0_diff=False, t_flip=1.01,
 
     return np.array(ode_list), chi_list
 
+def build_residue_maps(top):
+    """
+    Pre-compute atom indices for every residue that has the five atoms we need.
+    Returns a list of dicts (one per residue).
+    """
+    res_maps = []
+    for res in top.residues:
+        try:
+            res_maps.append(
+                dict(
+                    n   = res.atom('N' ).index,
+                    ca  = res.atom('CA').index,
+                    c   = res.atom('C' ).index,
+                    cb  = res.atom('CB').index,
+                    o   = res.atom('O' ).index,
+                    side=[a.index for a in res.atoms
+                          if a.name not in ('N', 'CA', 'C', 'O')]
+                )
+            )
+        except KeyError:      # glycine, missing O, etc.
+            continue
+    return res_maps
+
+
+def chirality_fix_tensor(pos, res_maps, t,
+                         k_side_init=0.02, k_oxy_init=-0.01,
+                         eps_target=2e-4, k_max=1.6):
+    """
+    Flip or encourage chirality for a single structure (batch = 1).
+
+    Parameters
+    ----------
+    pos   : (1, N, 3) *or* (N, 3) absolute coordinates  [nm]
+    res_maps : list from build_residue_maps(top)
+    t     : current diffusion time in [0, 1]
+    eps_target : signed volume we insist on after the flip branch
+    k_max : hard cap on any per-residue velocity            [nm ps⁻¹]
+
+    Returns
+    -------
+    dv    : (N, 3) velocity increments                     [nm ps⁻¹]
+    """
+    # ---- normalise shapes ---------------------------------------------------
+    if pos.ndim == 3:            # (1, N, 3) → (N, 3)
+        pos = pos[0]
+    N = pos.size(0)
+    dv = torch.zeros_like(pos)   # (N, 3)
+
+    # cubic track we want to follow
+    V_cubic   = 0.002 * t**3
+    time_left = max(1.0 - t, 1e-8)     # duration until t = 1
+
+    for rm in res_maps:
+        n, ca, c, cb, o, side = (
+            rm[k] for k in ('n', 'ca', 'c', 'cb', 'o', 'side')
+        )
+        side = torch.as_tensor(side, device=pos.device)
+
+        # backbone vectors (3-D each)
+        v1 = pos[n]  - pos[ca]          # N–CA
+        v2 = pos[c]  - pos[ca]          # C–CA
+        v3 = pos[cb] - pos[ca]          # CA→CB
+
+        n_vec = torch.cross(v1, v2)     # normal to the plane
+        A     = n_vec.norm() + 1e-8
+        n_hat = n_vec / A               # unit normal
+
+        V = torch.dot(n_hat, v3)        # signed volume  (scalar)
+
+        # choose branch -------------------------------------------------------
+        if V < 0:                       # ----- flip branch -----
+            delV       = eps_target - V           # positive amount to add
+            k_needed = torch.clamp(delV / (A * time_left),
+                                   0.0, k_max)
+
+        elif V < V_cubic:               # ----- encourage branch -----
+            delV       = V_cubic - V
+            k_needed = torch.clamp(delV / (A * time_left),
+                                   0.0, k_max)
+
+        else:                           # already on track
+            continue
+
+        # make push ⟂ CA–CB to keep bond length unchanged --------------------
+        u_cb   = v3 / (v3.norm() + 1e-8)
+        proj   = torch.dot(n_hat, u_cb) * u_cb
+        n_perp = (n_hat - proj)
+        n_perp = n_perp / (n_perp.norm() + 1e-8)
+
+        # apply velocities ----------------------------------------------------
+        dv[side] += k_needed * n_perp           # every side-chain atom incl. CB
+        dv[o]    += -0.5 * k_needed * n_perp    # oxygen counter-kick
+
+    return dv         # (N, 3)

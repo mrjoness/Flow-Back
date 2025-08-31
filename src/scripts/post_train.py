@@ -105,7 +105,7 @@ def get_args() -> Tuple[Any, Any]:
         Tuple containing parsed command line arguments and configuration arguments
     """
     parser = ArgumentParser(description='BoltzmannFlow')
-    parser = setup_args(parser=parser)  # Note: This seems recursive - might want to rename
+    parser = setup_args(parser=parser) 
     args = parser.parse_args()
     
     # Load configuration from YAML file
@@ -163,7 +163,7 @@ def _select_timesteps(N, split=0.8, num_samples=10, seed=None):
 if __name__ == '__main__':
     args, config_args = get_args()
     
-    config_yaml = 'configs/config.yaml'
+    config_yaml = f'{FLOWBACK_BASE}/configs/config.yaml'
     # for enantiomer correction
     
     load_dir = config_args.load_dir
@@ -415,7 +415,6 @@ if __name__ == '__main__':
                             sigma_list = [sigma_select]
                         for steps, sigmas in zip(step_list, sigma_list):
                             loss = adjoint_matching_loss(traj, model_ft_wrpd, model_wrpd, a_t, steps, sigmas, **kwargs)
-                            print('Loss', loss.item())
                             loss.backward()
                         if (i+1) % acc_grad_batch == 0:
                             optimizer.step()
