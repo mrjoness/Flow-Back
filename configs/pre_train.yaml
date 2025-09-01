@@ -1,40 +1,41 @@
-device: 'cuda'
-fmsigma: 0.005
-batch: 1
-CG_noise: 0.003
-eps: 301
-evalf: 10
-lr: 0.001
-wdecay: 0.0
-lrdecay: 0.0
-depth: 6
-nneigh: 15
-dim: 32
-loss: 'L1'
-mdim: 32
-clamp: 2
-attnevery: 0
-CGadj: 0.0
-system: 'pro'
-pos: 0
-solver: 'euler'
-batch_pack: 'max'
-diff_type: 'xt'
-load_path: 'default'
-top_path: 'default' 
-sym: 'e3'
-sym_rep: 1
-mask_prior: False
-pos_cos: 1000
-seq_feats: 4
-seq_decay: 100
-act: 'SiLU'
-grad_clip: 0.0
-mask_prior: True  # Whether to use masked prior distribution
-max_train: 100000 #max num of training proteins
-max_val: 100 #max num of validation proteins
-max_atoms: 8070
-atom_dim: 37
-res_dim: 21
-checkpoint: 0
-save_dir: 'pre_train'
+# Pre-training configuration for FlowBack
+device: 'cuda'         # Training device
+fmsigma: 0.005         # Noise coefficient for flow matching
+batch: 1               # Base batch size (scaled by molecule size)
+CG_noise: 0.003        # Std. deviation of CG prior noise
+eps: 301               # Number of training epochs
+evalf: 10              # Validate every N epochs
+lr: 0.001              # Learning rate
+wdecay: 0.0            # Weight decay
+lrdecay: 0.0           # Learning-rate decay per epoch
+depth: 6               # Number of EGNN layers
+nneigh: 15             # Nearest neighbors in graph
+dim: 32                # Hidden dimension
+loss: 'L1'             # Loss type ('L1' or 'L2')
+mdim: 32               # Message dimension
+clamp: 2               # Output clamp value
+attnevery: 0           # Attention frequency
+CGadj: 0.0             # Adjoint matching weight
+system: 'pro'          # System type
+pos: 0                 # Positional encoding type
+solver: 'euler'        # Integrator used during evaluation
+batch_pack: 'max'      # How to pack molecules in a batch
+diff_type: 'xt'        # Difference target for loss
+load_path: 'default'   # Path to training feature pickle
+top_path: 'default'    # Path to topology list pickle
+sym: 'e3'              # Equivariance group
+sym_rep: 1             # Number of symmetry representations
+mask_prior: True       # Whether to use masked prior distribution
+pos_cos: 1000          # Positional encoding size
+seq_feats: 4           # Number of sequence features
+seq_decay: 100         # Sequence feature decay
+act: 'SiLU'            # Activation function
+grad_clip: 0.0         # Gradient clipping threshold
+max_train: 100000      # Max number of training proteins
+max_val: 100           # Max number of validation proteins
+max_atoms: 8070        # Max atoms in a training example
+atom_dim: 37           # Atom feature dimension
+res_dim: 21            # Residue feature dimension
+checkpoint: 0          # Starting checkpoint
+save_dir: 'pre_train'  # Output directory for checkpoints
+

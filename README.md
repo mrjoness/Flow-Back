@@ -17,83 +17,54 @@
     conda install mdtraj matplotlib pandas
     conda install conda-forge::tqdm
 
+All commands below use the pattern:
+
+    python -m src.scripts.<script> [options] --config configs/<script>.yaml
+
 ### Quick test
-    cd ./scripts
-    python eval.py --n_gens 1 --load_dir PDB_example --mask_prior
+    python -m src.scripts.eval --load_dir PDB_example --config configs/eval.yaml
 
 ---
 
 ## Inference (FlowBack & FlowBack-Adjoint)
 
-The **integration (inference)** procedure is **identical** for base FlowBack and FlowBack-Adjoint models. Any model (with or without adjoint energy guidance) can be evaluated with the same commands.
+The **integration (inference)** procedure is identical for base FlowBack and FlowBack-Adjoint models. Edit `configs/eval.yaml` to control parameters such as `n_gens`, `CG_noise`, and clash checking.
 
-Generate 5 samples per CG trace in `./data/PDB_test_CG`:
-    
-    python eval.py --n_gens 5 --load_dir PDB_example --mask_prior
+Generate samples for coarse-grained traces:
 
-Compute bonds, clashes, and diversity vs AA references:
-    
-    python eval.py --n_gens 5 --load_dir PDB_example --retain_AA --check_bonds --check_clash --check_div --mask_prior
+    python -m src.scripts.eval --load_dir PDB_example --config configs/eval.yaml
 
-Increase diversity by using a noisier initial distribution:
-    
-    python eval.py --n_gens 5 --load_dir PDB_example --mask_prior --CG_noise 0.005
+To compute bond, clash, or diversity metrics, set `retain_AA`, `check_bonds`, `check_clash`, and `check_div` in `configs/eval.yaml` and run the same command.
 
-Backmap a short (10-frame) CG trajectory containing only C\-alpha atoms:
-    
-    python eval.py --n_gens 3 --load_dir pro_traj_example --mask_prior
+To increase diversity, adjust `CG_noise` in the config and rerun the command.
+
+Backmap a short (10-frame) CG trajectory:
+
+    python -m src.scripts.eval --load_dir pro_traj_example --config configs/eval.yaml
 
 ---
 
-## Training (base FlowBack)
+## Pre-Training (base FlowBack)
 
 Download training PDBs and pre-processed features from:
-    
+
     https://zenodo.org/records/13375392
 
-Unzip and move `train_features` into the working directory.
+Unzip and move `train_features` into the working directory. Edit `configs/pre_train.yaml` to specify `load_path` and `top_path` for the feature and topology pickles.
 
-Train protein model with default parameters:
-    
-    python train.py --system pro --load_path ./train_features/feats_pro_0-1000_all_max-8070.pkl
+Run pre-training:
 
-Train DNA–protein model:
-    
-    python train.py --system DNApro --load_path ./train_features/feats_DNAPro_DNA-range_10-120_pro-range_10-500.pkl
-
-Re-train with new PDBs:
-    
-    cd scripts
-    python featurize_pro.py --pdb_dir ../train_PDBs/ --save_name pro-train
+    python -m src.scripts.pre_train --config configs/pre_train.yaml
 
 ---
 
 ## Post-Training with FlowBack-Adjoint (Energy-Guided)
 
-**Goal**: Refine a pre-trained FlowBack model by incorporating **energy terms** in an adjoint matching objective.
+**Goal**: Refine a pre-trained FlowBack model by incorporating **energy terms** in an adjoint matching objective. Edit `configs/post_train.yaml` to choose the energy backend (`ff`), energy-loss weight (`lam`), and other training hyperparameters.
 
-**Energy backends**:
-- **RDKit**: lightweight, good for rapid prototyping.
-- **CHARMM (recommended)**: biomolecularly realistic. **Requires**:
-  - A working **GROMACS** installation.
-  - Access to the desired **CHARMM force field** (e.g., CHARMM27/CHARMM36).
+Run post-training:
 
-During post-training, energies are computed for generated structures and used as additional loss terms to bias the learned distribution toward **physically consistent** ensembles.
-
-### Configuration files
-
-Editable configs live in:
-    
-    configs/
-
-You can change:
-- Energy backend: `rdkit` or `charmm`
-- Energy-loss weight in the adjoint objective
-- Training hyperparameters (learning rate, batch size, etc.)
-
-### Example usage
-    
-    python post_train.py --config configs/charmm.yaml
+    python -m src.scripts.post_train --config configs/post_train.yaml
 
 ---
 
