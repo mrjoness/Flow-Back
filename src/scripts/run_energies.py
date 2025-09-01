@@ -76,12 +76,10 @@ def run_energy_pipeline(pdb_paths: list[str], output_file: str, save_dict: bool)
     """
     n_total = len(pdb_paths)
     print(f'Computing energies for {n_total} structures → {output_file}')
-    print(datetime.now())
 
     with mp.Pool(mp.cpu_count()) as pool:
         results = pool.starmap(compute_energy, [(i, p) for i, p in enumerate(pdb_paths)])
 
-    print(datetime.now())
 
     # keep successful ones, preserving original ordering
     results.sort()

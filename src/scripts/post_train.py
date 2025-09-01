@@ -254,7 +254,6 @@ if __name__ == '__main__':
     
     np.random.shuffle(full_trj_list)
 
-    print(len(full_trj_list))
     if restart:
         cur_epoch = config_args.restart_ckp
         

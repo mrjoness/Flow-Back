@@ -164,10 +164,6 @@ def get_dihed_idxs(top):
             if None not in indices:  # Ensure all atoms are present
                 atom_indices.append(indices)
 
-    print("Atom indices for each residue (excluding glycine):")
-    for idx_set in atom_indices:
-        print(idx_set)
-        
     return atom_indices
 
 
