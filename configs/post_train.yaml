@@ -22,20 +22,16 @@ vram: 16       # Approx. GPU VRAM (GB) for auto-batching
 
 n_samples: 100        # Structures drawn per epoch for energy eval
 
-#load_path: 'train_features/feats_chignolin.pkl'
-#top_path: 'train_features/tops_chignolin.pkl'
 num_steps: 100        # ODE steps for energy evaluation
-selection_split: 0.8  # Fraction of steps used for adjoint matching
+selection_split: 0.8  # After this number, all steps are calculated for adjoint loss. Before, steps are randomly sampled (see appendix of Domingo Enrich, et al. 2025).
 
 lam: 0.01      # Weight of energy guidance term
 
 save_dir: 'adjoint'   # Output directory for checkpoints
 acc_grad_batch: 16    # Accumulate gradients over N batches
 max_grad: 20          # Max gradient norm for clipping
-#pdb_list: /project2/andrewferguson/berlaga/Flow-Back/data/train/under_50.txt
 pdb_list: 'default'   # Optional list of training PDBs
 ff: 'CHARMM'          # Energy backend ('RDKit' or 'CHARMM')
 restart: False        # Resume training from save_dir
 int_ff: True          # Use internal FF parameters
 t_flip: 0.25          # Fraction of steps to attempt chirality flips
-# restart_ckp: 1
