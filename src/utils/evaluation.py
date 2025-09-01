@@ -1,14 +1,13 @@
-#from egnn_utils import *
-
 import os, tempfile
 from file_config import FLOWBACK_OUTPUTS
 from .model import *
-
+import yaml
 import glob
 import pickle as pkl 
 
 from sidechainnet.structure.build_info import NUM_COORDS_PER_RES, SC_BUILD_INFO
 from sidechainnet.utils.sequence import ONE_TO_THREE_LETTER_MAP
+
 THREE_TO_ONE_LETTER_MAP = {y: x for x, y in ONE_TO_THREE_LETTER_MAP.items()}
 
 ATOM_MAP_14 = {}
@@ -28,7 +27,6 @@ def process_pro_aa(load_dir, stride=1):
     
     # skip straight to inference if data already cleaned
     if os.path.exists(save_dir):
-        print('Data already cleaned')
         return save_dir
         
     os.makedirs(save_dir, exist_ok=True)
@@ -51,61 +49,59 @@ def process_pro_aa(load_dir, stride=1):
         idx_list = []
         atom_cnt = 0
         x = y = z = 0.000
-
-        for i, res in enumerate(cg_trj.top.residues):
-            one_letter = THREE_TO_ONE_LETTER_MAP[res.name]
+        resseqs = sorted(set(res.resSeq for res in cg_trj.topology.residues))
+        for i in resseqs:
+            first_atom = cg_trj.top.select(f'resSeq {i}')[0]
+            res_ = cg_trj.top.atom(first_atom).residue
+            one_letter = THREE_TO_ONE_LETTER_MAP[res_.name]
             atom_map = ATOM_MAP_14[one_letter]
 
             for a in atom_map:
                 if a=='PAD': break
 
                 try:    
-
-                    idx = aa_top.select(f'resid {i} and name {a}')[0]
+                    idx = aa_top.select(f'resSeq {i} and name {a}')[0]
                     idx_list.append(idx)
-
                     #if a=='CA': msk_idxs.append(i)
 
                     # Format each part of the line according to the PDB specification
                     atom_serial = f"{atom_cnt+1:5d}"
                     atom_name = f"{a:>4}"  # {a:^4} Centered in a 4-character width, adjust as needed
-                    residue_name = f"{res.name:3}"
+                    residue_name = f"{res_.name:3}"
                     chain_id = "A"
-                    residue_number = f"{res.index+1:4d}"
+                    residue_number = f"{res_.index+1:4d}"
                     x_coord = f"{x:8.3f}"
                     y_coord = f"{y:8.3f}"
                     z_coord = f"{z:8.3f}"
                     occupancy = "  1.00"
                     temp_factor = "  0.00"
                     element_symbol = f"{a[:1]:>2}"  # Right-aligned in a 2-character width
-
                     # Combine all parts into the final PDB line
                     aa_pdb += f"ATOM  {atom_serial} {atom_name} {residue_name} {chain_id}{residue_number}    {x_coord}{y_coord}{z_coord}{occupancy}{temp_factor}           {element_symbol}\n"
 
                 except:
-                    print('No matching atom!')
+                    print(f'No matching atom! {a, i, residue_name, residue_number}')
 
                 atom_cnt += 1
 
         # add TER
         atom_serial = f"{atom_cnt+1:5d}"
         atom_name = f"{' ':^4}"
-        residue_name = f"{res.name:3}"
+        residue_name = f"{res_.name:3}"
         aa_pdb += f'TER   {atom_serial} {atom_name} {residue_name} {chain_id}{residue_number}\nENDMDL\nEND'
 
         # if aa traj exists, reorder idxs -- really just need to do this for CAs idxs right?
         xyz = aa_trj.xyz[:, np.array(idx_list)]
 
-        # save txt as temporary pdb and load new molecules
-        with tempfile.NamedTemporaryFile('w', suffix='.pdb') as tmp:
+        # Save txt as temporary pdb and load new molecules
+        with tempfile.NamedTemporaryFile(mode='w+', suffix='.pdb', delete=True) as tmp:
             tmp.write(aa_pdb)
-            tmp.flush()
+            tmp.flush()  # Ensure content is written to disk before reading
             trj_aa_fix = md.load(tmp.name)
-        trj_aa_fix = md.Trajectory(xyz, topology=trj_aa_fix.top)
+            trj_aa_fix = md.Trajectory(xyz, topology=trj_aa_fix.top)
 
         # save pdb -- save as dcd if longer than
         save_path = pdb.replace(load_dir, save_dir)
-        print('save:', save_path)
         trj_aa_fix.save_pdb(save_path)
               
     return save_dir
@@ -194,11 +190,11 @@ def process_pro_cg(load_dir, stride=1):
         xyz[:, np.array(ca_idxs)] = cg_xyz
 
         # save txt as temporary pdb and load new molecules
-        with tempfile.NamedTemporaryFile('w', suffix='.pdb') as tmp:
+        with tempfile.NamedTemporaryFile(mode='w+', suffix='.pdb', delete=True) as tmp: 
             tmp.write(aa_pdb)
-            tmp.flush()
+            tmp.flush()  # Ensure content is written to disk before reading
             trj_aa_fix = md.load(tmp.name)
-        trj_aa_fix = md.Trajectory(xyz, topology=trj_aa_fix.top)
+            trj_aa_fix = md.Trajectory(xyz, topology=trj_aa_fix.top)
 
         # save pdb
         save_path = pdb.replace(load_dir, save_dir)
@@ -206,7 +202,7 @@ def process_pro_cg(load_dir, stride=1):
               
     return save_dir
 
-def process_dna_cg(pdb, dcd=None, pro_trj=None, save_path=f'{FLOWBACK_OUTPUTS}/sidechainnet_data/test', stride=1, bsp_reorder=False):
+def process_dna_cg(pdb, dcd=None, pro_trj=None, save_path='./sidechainnet_data/test', stride=1, bsp_reorder=False):
     '''Write a blank pdb for the dna coords -- keep the CG section the same as ref'''
     
     standard_order = {
@@ -292,11 +288,10 @@ def process_dna_cg(pdb, dcd=None, pro_trj=None, save_path=f'{FLOWBACK_OUTPUTS}/s
     aa_pdb += '\nENDMDL\nEND'
     
     # save txt as temporary pdb and load new molecules
-    with tempfile.NamedTemporaryFile('w', suffix='.pdb') as tmp:
-        tmp.write(aa_pdb)
-        tmp.flush()
-        # matching aa_traj with original number of frames
-        aa_trj = md.load(tmp.name)
+    open('temp.pdb', 'w').write(aa_pdb)
+    
+    # matching aa_traj with orginal number of frames
+    aa_trj = md.load('temp.pdb')
     aa_xyz = np.zeros((n_frames, aa_trj.n_atoms, 3))
     aa_trj= md.Trajectory(aa_xyz, topology=aa_trj.top)
     
@@ -315,6 +310,7 @@ def process_dna_cg(pdb, dcd=None, pro_trj=None, save_path=f'{FLOWBACK_OUTPUTS}/s
 
         cg_xyz = cg_trj.xyz[:, np.array(cg_idxs)]
     else:
+        print('No re-order')
         cg_xyz = cg_trj.xyz
 
     # concatenate aa trace with cg trace
@@ -337,12 +333,14 @@ def process_dna_cg(pdb, dcd=None, pro_trj=None, save_path=f'{FLOWBACK_OUTPUTS}/s
     return aa_trj
 
 #@ optionally add these functions to eval_utils
-def load_model(model_path, ckp, device): #, sym='e3', pos_cos=None, seq_feats=0, seq_decay=100):
+def load_model(model_path, ckp, device, config=None): #, sym='e3', pos_cos=None, seq_feats=0, seq_decay=100):
     '''Load model from a given path to device'''
     
     # load hyperparams associated with specific model
-    model_params = pkl.load(open(f'{model_path}/params.pkl', 'rb')) 
-
+    # model_params = pkl.load(open(f'{model_path}/params.pkl', 'rb')) 
+    # Load configuration from YAML file
+    with open(f'{model_path}/config.yaml', 'r') as file:
+        model_params = yaml.safe_load(file)
     ## TODO -- get rid or these inputs and always set pos_cos, num_positions to None
     pos_cos = model_params['pos_cos']
 
@@ -354,13 +352,14 @@ def load_model(model_path, ckp, device): #, sym='e3', pos_cos=None, seq_feats=0,
         num_positions = None  # change this back ifthe 
         #num_positions = model_params['max_atoms']
 
+
     model = EGNN_Network_time(
         num_tokens = model_params['res_dim'],
         atom_dim = model_params['atom_dim'],
         num_positions = num_positions, #model_params['max_atoms'],
         dim = model_params['dim'],               
         depth = model_params['depth'],
-        num_nearest_neighbors = model_params['num_nearest_neighbors'],
+        num_nearest_neighbors = model_params['nneigh'],
         global_linear_attn_every = 0,
         coor_weights_clamp_value = 2.,  
         m_dim=model_params['mdim'],
@@ -376,7 +375,11 @@ def load_model(model_path, ckp, device): #, sym='e3', pos_cos=None, seq_feats=0,
 
     # load model 
     state_dict_path = f'{model_path}/state-{ckp}.pth' 
-    model.load_state_dict(torch.load(state_dict_path))
+
+    if not torch.cuda.is_available():
+        model.load_state_dict(torch.load(state_dict_path, map_location=torch.device('cpu')))
+    else:
+        model.load_state_dict(torch.load(state_dict_path))
 
     return model
 

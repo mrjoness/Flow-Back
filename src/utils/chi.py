@@ -8,6 +8,7 @@ def get_all_chiralities_vec(traj):
 
     for frame_idx in range(traj.n_frames):
         frame_chiralities = []
+        volumes = []
         for residue in traj.top.residues:
             try:
                 # Get atom indices for N, CA, C, and CB
@@ -29,13 +30,14 @@ def get_all_chiralities_vec(traj):
 
                 # Compute the volume of the parallelepiped formed by v1, v2, and v3
                 volume = np.dot(np.cross(v1, v2), v3)
-
                 if volume > 0.:
                     frame_chiralities.append(-1)
-                elif volume < 0.:
+                elif volume < 0:
+                    # print(volume)
                     frame_chiralities.append(1)
                 else:
                     frame_chiralities.append(0)
+                # frame_chiralities.append(volume)
 
             except KeyError:
                 frame_chiralities.append(0)
@@ -43,6 +45,103 @@ def get_all_chiralities_vec(traj):
         chiralities.append(frame_chiralities)
 
     return np.array(chiralities)
+
+import torch
+
+def build_residue_maps(top):
+    """
+    Pre-compute atom indices for every residue that has the five atoms we need.
+    Returns a list of dicts (one per residue).
+    """
+    res_maps = []
+    for res in top.residues:
+        try:
+            res_maps.append(
+                dict(
+                    n   = res.atom('N' ).index,
+                    ca  = res.atom('CA').index,
+                    c   = res.atom('C' ).index,
+                    cb  = res.atom('CB').index,
+                    o   = res.atom('O' ).index,
+                    side=[a.index for a in res.atoms
+                          if a.name not in ('N', 'CA', 'C', 'O')]
+                )
+            )
+        except KeyError:      # glycine, missing O, etc.
+            continue
+    return res_maps
+
+
+def chirality_fix_tensor(pos, res_maps, t,
+                         k_side_init=0.02, k_oxy_init=-0.01,
+                         eps_target=2e-4, k_max=1.6):
+    """
+    Flip or encourage chirality for a single structure (batch = 1).
+
+    Parameters
+    ----------
+    pos   : (1, N, 3) *or* (N, 3) absolute coordinates  [nm]
+    res_maps : list from build_residue_maps(top)
+    t     : current diffusion time in [0, 1]
+    eps_target : signed volume we insist on after the flip branch
+    k_max : hard cap on any per-residue velocity            [nm ps⁻¹]
+
+    Returns
+    -------
+    dv    : (N, 3) velocity increments                     [nm ps⁻¹]
+    """
+    # ---- normalise shapes ---------------------------------------------------
+    if pos.ndim == 3:            # (1, N, 3) → (N, 3)
+        pos = pos[0]
+    N = pos.size(0)
+    dv = torch.zeros_like(pos)   # (N, 3)
+
+    # cubic track we want to follow
+    V_cubic   = 0.002 * t**3
+    time_left = max(1.0 - t, 1e-8)     # duration until t = 1
+
+    for rm in res_maps:
+        n, ca, c, cb, o, side = (
+            rm[k] for k in ('n', 'ca', 'c', 'cb', 'o', 'side')
+        )
+        side = torch.as_tensor(side, device=pos.device)
+
+        # backbone vectors (3-D each)
+        v1 = pos[n]  - pos[ca]          # N–CA
+        v2 = pos[c]  - pos[ca]          # C–CA
+        v3 = pos[cb] - pos[ca]          # CA→CB
+
+        n_vec = torch.cross(v1, v2)     # normal to the plane
+        A     = n_vec.norm() + 1e-8
+        n_hat = n_vec / A               # unit normal
+
+        V = torch.dot(n_hat, v3)        # signed volume  (scalar)
+
+        # choose branch -------------------------------------------------------
+        if V < 0:                       # ----- flip branch -----
+            delV       = eps_target - V           # positive amount to add
+            k_needed = torch.clamp(delV / (A * time_left),
+                                   0.0, k_max)
+
+        elif V < V_cubic:               # ----- encourage branch -----
+            delV       = V_cubic - V
+            k_needed = torch.clamp(delV / (A * time_left),
+                                   0.0, k_max)
+
+        else:                           # already on track
+            continue
+
+        # make push ⟂ CA–CB to keep bond length unchanged --------------------
+        u_cb   = v3 / (v3.norm() + 1e-8)
+        proj   = torch.dot(n_hat, u_cb) * u_cb
+        n_perp = (n_hat - proj)
+        n_perp = n_perp / (n_perp.norm() + 1e-8)
+
+        # apply velocities ----------------------------------------------------
+        dv[side] += k_needed * n_perp           # every side-chain atom incl. CB
+        dv[o]    += -0.5 * k_needed * n_perp    # oxygen counter-kick
+
+    return dv         # (N, 3)
 
 def get_atom_indices_by_name(topology, residue, atom_names):
     indices = []
@@ -65,6 +164,10 @@ def get_dihed_idxs(top):
             if None not in indices:  # Ensure all atoms are present
                 atom_indices.append(indices)
 
+    print("Atom indices for each residue (excluding glycine):")
+    for idx_set in atom_indices:
+        print(idx_set)
+        
     return atom_indices
 
 
@@ -252,8 +355,8 @@ def invert_chirality_reflection_ter(traj, chi):
                 normal_vector = normal_vector / np.linalg.norm(normal_vector)  # Normalize the vector
                 
                 # Get the indices of all side chain atoms
-                side_chain_indices = [atom.index for atom in residue.atoms if atom.name not in ['N', 'CA', 'C', 'O', 'OXT']]
-
+                # side_chain_indices = [atom.index for atom in residue.atoms if atom.name not in ['N', 'CA', 'C', 'O', 'OXT']]
+                side_chain_indices = [atom.index for atom in residue.atoms if atom.name not in ['N', 'CA', 'C']]
                 # Reflect the side chain atoms through the plane defined by N, CA, and C
                 for atom_idx in side_chain_indices:
                     atom_coords = traj.xyz[frame_index, atom_idx]
@@ -263,7 +366,7 @@ def invert_chirality_reflection_ter(traj, chi):
     return traj
 
 
-def euler_integrator_chi_check(model, x, nsteps=100, x0_diff=False, t_flip=1.01, top_ref=None, keep_flip=False, type_flip='ref-ter'):
+def euler_integrator_chi_check(model, x, ca_pos, nsteps=100, x0_diff=False, t_flip=1.01, top_ref=None, keep_flip=False, type_flip='ref-ter'):
     
     # try adding small amounts of noise during integration
     
@@ -303,122 +406,26 @@ def euler_integrator_chi_check(model, x, nsteps=100, x0_diff=False, t_flip=1.01,
         # first frame only for now
         if t > t_flip:
             if keep_flip or not chiral_flipped:
-                
+                x_ca = x + ca_pos
                 # add this to the t_flip loop to save time (especially if don't keep flipping)
-                x_real = x[:, :n_real]
-                trj = md.Trajectory(x_real.cpu().numpy(), top_ref)
+                trj = md.Trajectory(x_ca.cpu().numpy(), top_ref)
                 chi = get_all_chiralities_vec(trj)
-                chi_list.append(chi)
                 trj = flip_func(trj, chi)
-                x[:, :n_real] = torch.Tensor(trj.xyz).to(device)
+                x = torch.Tensor(trj.xyz).to(device) - ca_pos
                 chiral_flipped = True
         
         ode_list.append(x.cpu().numpy())
-        
+
+    x_ca = x + ca_pos
     # final flip to ensure no enantiomiers are left
-    x_real = x[:, :n_real]
-    trj = md.Trajectory(x_real.cpu().numpy(), top_ref)
+    trj = md.Trajectory(x_ca.cpu().numpy(), top_ref)
     chi = get_all_chiralities_vec(trj)
-    res_list = np.where(chi[0] > 0.001)[0]
     trj = flip_func(trj, chi)
-    x[:, :n_real] = torch.Tensor(trj.xyz).to(device)
+    x = torch.Tensor(trj.xyz).to(device) - ca_pos
+    chiral_flipped = True
     
     ode_list.append(x.cpu().numpy())
     chi_list.append(get_all_chiralities_vec(trj))
 
-    return np.array(ode_list), chi_list
+    return np.array(ode_list)
 
-def build_residue_maps(top):
-    """
-    Pre-compute atom indices for every residue that has the five atoms we need.
-    Returns a list of dicts (one per residue).
-    """
-    res_maps = []
-    for res in top.residues:
-        try:
-            res_maps.append(
-                dict(
-                    n   = res.atom('N' ).index,
-                    ca  = res.atom('CA').index,
-                    c   = res.atom('C' ).index,
-                    cb  = res.atom('CB').index,
-                    o   = res.atom('O' ).index,
-                    side=[a.index for a in res.atoms
-                          if a.name not in ('N', 'CA', 'C', 'O')]
-                )
-            )
-        except KeyError:      # glycine, missing O, etc.
-            continue
-    return res_maps
-
-
-def chirality_fix_tensor(pos, res_maps, t,
-                         k_side_init=0.02, k_oxy_init=-0.01,
-                         eps_target=2e-4, k_max=1.6):
-    """
-    Flip or encourage chirality for a single structure (batch = 1).
-
-    Parameters
-    ----------
-    pos   : (1, N, 3) *or* (N, 3) absolute coordinates  [nm]
-    res_maps : list from build_residue_maps(top)
-    t     : current diffusion time in [0, 1]
-    eps_target : signed volume we insist on after the flip branch
-    k_max : hard cap on any per-residue velocity            [nm ps⁻¹]
-
-    Returns
-    -------
-    dv    : (N, 3) velocity increments                     [nm ps⁻¹]
-    """
-    # ---- normalise shapes ---------------------------------------------------
-    if pos.ndim == 3:            # (1, N, 3) → (N, 3)
-        pos = pos[0]
-    N = pos.size(0)
-    dv = torch.zeros_like(pos)   # (N, 3)
-
-    # cubic track we want to follow
-    V_cubic   = 0.002 * t**3
-    time_left = max(1.0 - t, 1e-8)     # duration until t = 1
-
-    for rm in res_maps:
-        n, ca, c, cb, o, side = (
-            rm[k] for k in ('n', 'ca', 'c', 'cb', 'o', 'side')
-        )
-        side = torch.as_tensor(side, device=pos.device)
-
-        # backbone vectors (3-D each)
-        v1 = pos[n]  - pos[ca]          # N–CA
-        v2 = pos[c]  - pos[ca]          # C–CA
-        v3 = pos[cb] - pos[ca]          # CA→CB
-
-        n_vec = torch.cross(v1, v2)     # normal to the plane
-        A     = n_vec.norm() + 1e-8
-        n_hat = n_vec / A               # unit normal
-
-        V = torch.dot(n_hat, v3)        # signed volume  (scalar)
-
-        # choose branch -------------------------------------------------------
-        if V < 0:                       # ----- flip branch -----
-            delV       = eps_target - V           # positive amount to add
-            k_needed = torch.clamp(delV / (A * time_left),
-                                   0.0, k_max)
-
-        elif V < V_cubic:               # ----- encourage branch -----
-            delV       = V_cubic - V
-            k_needed = torch.clamp(delV / (A * time_left),
-                                   0.0, k_max)
-
-        else:                           # already on track
-            continue
-
-        # make push ⟂ CA–CB to keep bond length unchanged --------------------
-        u_cb   = v3 / (v3.norm() + 1e-8)
-        proj   = torch.dot(n_hat, u_cb) * u_cb
-        n_perp = (n_hat - proj)
-        n_perp = n_perp / (n_perp.norm() + 1e-8)
-
-        # apply velocities ----------------------------------------------------
-        dv[side] += k_needed * n_perp           # every side-chain atom incl. CB
-        dv[o]    += -0.5 * k_needed * n_perp    # oxygen counter-kick
-
-    return dv         # (N, 3)
