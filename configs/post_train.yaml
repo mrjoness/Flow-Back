@@ -1,40 +1,41 @@
-load_dir: "1FME 2WAV lambda NTL9 chignolin 2JOF NuG2 UVF A3D" # Path to input pdbs -- Can be AA or CG
-CG_noise: 0.003  # Noise profile to use as prior
-ckp: 15  # Checkpoint for given mode
-n_gens: 1  # N generated samples per structure
-stride: 1  # Stride applied to trajectories
-batch: 1 # Worst-case batch size
-evalf: 10
+# Post-training configuration for FlowBack-Adjoint
+load_dir: "1FME 2WAV lambda NTL9 chignolin 2JOF NuG2 UVF A3D" # Input PDB IDs or directory
+CG_noise: 0.003   # Std. deviation of prior noise
+ckp: 15           # Starting checkpoint of the base model
+n_gens: 1         # Generated samples per structure
+stride: 1         # Trajectory stride when loading data
+batch: 1          # Worst-case batch size
+evalf: 10         # Evaluate loss every N steps
 
 mask_prior: False  # Enforce CG positions remain the same
-retain_AA: False  # Hold AA positions for scoring
+retain_AA: False   # Hold AA positions for scoring
 
-model_path: "models/pre_train"  # Trained model
-nsteps: 100  # Number of steps in Euler integrator
-n_epochs: 20  # Number of epochs to train for
+model_path: "models/pre_train"  # Path to pre-trained model
+nsteps: 100         # Number of steps in Euler integrator
+n_epochs: 20        # Number of fine-tuning epochs
 
-lr: 0.00001 # Learning Rate
-wdecay: 0.0  # Weight Decay
-grad_clip: 0.0  # Gradient Clipping
+lr: 0.00001    # Learning rate for optimizer
+wdecay: 0.0    # Weight decay
+grad_clip: 0.0 # Gradient clipping threshold
 
-vram: 16  # Scale batch size to fit max GPU VRAM
+vram: 16       # Approx. GPU VRAM (GB) for auto-batching
 
-n_samples: 100
+n_samples: 100        # Structures drawn per epoch for energy eval
 
 #load_path: 'train_features/feats_chignolin.pkl'
 #top_path: 'train_features/tops_chignolin.pkl'
-num_steps: 100
-selection_split: 0.8
+num_steps: 100        # ODE steps for energy evaluation
+selection_split: 0.8  # Fraction of steps used for adjoint matching
 
-lam: 0.01
+lam: 0.01      # Weight of energy guidance term
 
-save_dir: 'adjoint'
-acc_grad_batch: 16
-max_grad: 20
+save_dir: 'adjoint'   # Output directory for checkpoints
+acc_grad_batch: 16    # Accumulate gradients over N batches
+max_grad: 20          # Max gradient norm for clipping
 #pdb_list: /project2/andrewferguson/berlaga/Flow-Back/data/train/under_50.txt
-pdb_list: 'default'
-ff: 'CHARMM'
-restart: False
-int_ff: True
-t_flip: 0.25
+pdb_list: 'default'   # Optional list of training PDBs
+ff: 'CHARMM'          # Energy backend ('RDKit' or 'CHARMM')
+restart: False        # Resume training from save_dir
+int_ff: True          # Use internal FF parameters
+t_flip: 0.25          # Fraction of steps to attempt chirality flips
 # restart_ckp: 1
