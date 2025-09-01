@@ -310,7 +310,6 @@ def process_dna_cg(pdb, dcd=None, pro_trj=None, save_path='./sidechainnet_data/t
 
         cg_xyz = cg_trj.xyz[:, np.array(cg_idxs)]
     else:
-        print('No re-order')
         cg_xyz = cg_trj.xyz
 
     # concatenate aa trace with cg trace

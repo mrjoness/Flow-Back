@@ -1,14 +1,16 @@
 ### input directory to pdbs/trajs and return N generated samples of each ###
 
 import os
-from file_config import FLOWBACK_OUTPUTS, FLOWBACK_DATA, FLOWBACK_MODELS
-
-import argparse
 import glob
 import pickle as pkl
 from tqdm import tqdm
 import time
 import datetime
+import yaml
+import argparse
+from argparse import ArgumentParser
+
+from file_config import FLOWBACK_OUTPUTS, FLOWBACK_DATA, FLOWBACK_MODELS, FLOWBACK_BASE
 
 # need to test these for preproccessing
 from src.utils.evaluation import *
@@ -16,88 +18,78 @@ from src.utils.evaluation import *
 # import functions to check and correct chirality
 from src.utils.chi import *
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--load_dir', default='PDB', type=str, help='Path to input pdbs -- Can be AA or CG')
-parser.add_argument('--CG_noise', default=0.003, type=float, help='Noise profile to use as prior')
-parser.add_argument('--ckp', default=14, type=int, help='Checkpoint for given mode')
-parser.add_argument('--n_gens', default=1, type=int, help='N generated samples per structure')
-parser.add_argument('--solver', default='euler_ff', type=str, help='Which type of ODE solver to use')
-parser.add_argument('--stride', default='1', type=int, help='Stride applie to trajectories')
-parser.add_argument('--check_clash', action='store_true',  help='Calculate clash for each sample')
-parser.add_argument('--check_bonds', action='store_true',  help='Calculate bond quality for each sample')
-parser.add_argument('--check_div', action='store_true',  help='Calculate diversity score (for multi-gen)')
-parser.add_argument('--mask_prior', action='store_true',  help='Enforce CG positions remain the same')
-parser.add_argument('--retain_AA', action='store_true',  help='Hold AA positions for scoring')
-parser.add_argument('--model_path', default='../models/Pro_pretrained', type=str, help='Trained model')
-parser.add_argument('--tolerance', default=3e-5, type=float, help='Tolerance if using NN solver')
-parser.add_argument('--nsteps', default=100, type=int, help='Number of steps in Euler integrator')
-parser.add_argument('--system', default='pro', type=str, help='Pro or DNAPro CG input')
-parser.add_argument('--save_dir', default='', type=str, help='Where to save structures')
-parser.add_argument('--external', action='store_true',  help='load_dir is outside this directory')
+
+def setup_args(parser: ArgumentParser) -> ArgumentParser:
+    parser.add_argument('--config', type=str, default=f'{FLOWBACK_BASE}/configs/eval.yaml',
+                        help='Path to config file')
+    parser.add_argument('--load_dir', default='PDB', type=str,
+                        help='Path to input pdbs -- Can be AA or CG')
+    parser.add_argument('--model_path', default=f'{FLOWBACK_MODELS}/post_train', type=str,
+                        help='Trained model')
+    parser.add_argument('--ckp', default='7000', type=str, help='Checkpoint for given mode')
+    return parser
 
 
-parser.add_argument('--vram', default=32, type=int, help='Scale batch size to fit max gpu VRAM')
-parser.add_argument('--save_traj', action='store_true',  help='Save all flow-matching timesteps')
-parser.add_argument('--save_dcd', action='store_true',  help='Save traj output as a pdb+dcd')
-parser.add_argument('--overwrite', action='store_true',  help='Save traj output as a pdb+dcd')
+def config_to_args(config):
+    return argparse.Namespace(**config)
 
-# for enantiomer correction
-parser.add_argument('--t_flip', default=0.2, type=float,  help='ODE time to correct fo D-residues')
-parser.add_argument('--type_flip', type=str, default='ref-ter', help='Method used to fix chirality')
 
-args = parser.parse_args()
+def get_args():
+    parser = ArgumentParser()
+    parser = setup_args(parser)
+    args = parser.parse_args()
+    with open(args.config, 'r') as file:
+        config = yaml.safe_load(file)
+    config_args = config_to_args(config)
+    return args, config_args
+
+
+args, config_args = get_args()
+
 load_dir = args.load_dir
-CG_noise = args.CG_noise
 model_path = args.model_path
 ckp = args.ckp
-n_gens = args.n_gens
-solver = args.solver
-stride = args.stride
-check_clash = args.check_clash
-check_bonds = args.check_bonds
-check_div = args.check_div
-mask_prior = args.mask_prior
-retain_AA = args.retain_AA
-tol = args.tolerance
-nsteps = args.nsteps
-t_flip = args.t_flip
-type_flip = args.type_flip
-system = args.system
-vram = args.vram
-save_traj = args.save_traj
-save_dcd = args.save_dcd
-overwrite = args.overwrite
 
-if args.save_dir == '':
+CG_noise = config_args.CG_noise
+n_gens = config_args.n_gens
+solver = config_args.solver
+stride = config_args.stride
+check_clash = config_args.check_clash
+check_bonds = config_args.check_bonds
+check_div = config_args.check_div
+mask_prior = config_args.mask_prior
+retain_AA = config_args.retain_AA
+tol = config_args.tolerance
+nsteps = config_args.nsteps
+t_flip = config_args.t_flip
+type_flip = config_args.type_flip
+system = config_args.system
+vram = config_args.vram
+save_traj = config_args.save_traj
+save_dcd = config_args.save_dcd
+overwrite = config_args.overwrite
+save_dir_cfg = config_args.save_dir
+external = config_args.external
+
+if save_dir_cfg == '':
     save_dir = f'../outputs/{load_dir}'
     if solver == 'euler_ff':
-        # save_prefix = f'{save_dir}/{model_path.split("/")[-1]}_ckp-{ckp}_noise-{CG_noise}/'
         save_prefix = f'{save_dir}/{model_path.split("/")[-1]}_ckp-{ckp}_noise-{CG_noise}_chi_{t_flip}/'
     elif solver == 'euler':
         save_prefix = f'{save_dir}/{model_path.split("/")[-1]}_ckp-{ckp}_euler_noise-{CG_noise}/'
     elif solver == 'euler_chi':
         save_prefix = f'{save_dir}/{model_path.split("/")[-1]}_ckp-{ckp}_euler_noise-{CG_noise}_chi_{t_flip}/'
-    # if noise_flow:
-    #     save_prefix = f'{save_prefix[:-1]}_noised/'
-    # if mask_prior:
-    #     save_prefix = save_prefix[:-1] + '_masked/'
 else:
-    save_dir = args.save_dir + '/'
-    save_prefix = args.save_dir + '/'
-    # remove mask and nsteps to simplify naming
+    save_dir = save_dir_cfg + '/'
+    save_prefix = save_dir_cfg + '/'
 
-
-
-
-
-if not args.external:
+if not external:
     load_dir = f'data/{load_dir}'
 
 
 os.makedirs(save_prefix, exist_ok=True)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(device)
 
 # add optional preprocessing to save files -- skip if already cleaned
 if system == 'pro':
@@ -120,14 +112,12 @@ else:
 
 # load model
 model = load_model(model_path, ckp, device) #, sym, pos_cos, seq_feats, seq_decay)
-print('params:', sum(p.numel() for p in model.parameters() if p.requires_grad))
 
 # Track scores
 bf_list, clash_list, div_list = [], [], []
 
 # save time for inference as a function of size -- over n-res?
 time_list, res_list = [], []
-print(load_dir)
 trj_list = sorted(glob.glob(f'{load_dir}/*.pdb'))
 print(f'Found {len(trj_list)} trajs to backmap')
 
@@ -207,7 +197,6 @@ for trj_name in tqdm(trj_list, desc='Iterating over trajs'):
             time_diff = datetime.datetime.now() - start_time
             time_list.append(time_diff.total_seconds())
             res_list.append(trj.n_residues)
-            print(ode_traj.shape)
             
             # save trj -- optionally save ODE integration not just last structure -- only for one gen
             if save_traj:
@@ -218,15 +207,12 @@ for trj_name in tqdm(trj_list, desc='Iterating over trajs'):
         # trj = md.Trajectory(ode_traj.squeeze() + ca_pos_test, top)
         # chi = get_all_chiralities_vec(trj)
         # print(chi[:, 18], chi[-1])
-        print(np.shape(xyz_gen))
         xyz_gen = np.concatenate(xyz_gen)
-        print(xyz_gen.shape)
               
         # don't include DNA virtual atoms in top 
         aa_idxs = top.select(f"not name DS and not name DP and not name DB")
         trj_gens = md.Trajectory(xyz_gen[:, :top.n_atoms], top).atom_slice(aa_idxs)
         trj_refs = md.Trajectory(xyz_ref[:, :top.n_atoms], top).atom_slice(aa_idxs)
-        print(trj_gens.xyz.shape)
     
         # Can only calculate bonds and div if an AA reference is provided
         if check_bonds:
@@ -236,7 +222,6 @@ for trj_name in tqdm(trj_list, desc='Iterating over trajs'):
               
         # protein only clash only for now
         if check_clash:
-            print(trj_gens[0])
             clash = [clash_res_percent(t_gen) for t_gen in trj_gens]
             clash = np.array(clash).reshape(n_frames, n_gens)
             clash_list.append(clash)
@@ -259,7 +244,6 @@ for trj_name in tqdm(trj_list, desc='Iterating over trajs'):
         if save_traj:
             save_i = save_name.replace('.pdb', f'_dt.pdb')
             trj_gens.save_pdb(save_i)
-            print(save_i)
         else:
             for i in range(n_gens):
                 save_i = save_name.replace('.pdb', f'_{i+1}.pdb')
@@ -272,13 +256,10 @@ for trj_name in tqdm(trj_list, desc='Iterating over trajs'):
 # save all scores to same dir
 if check_bonds:
     np.save(f'{save_prefix}bf.npy', np.array(bf_list))
-    print('mean bf: ', np.mean(bf_list))
 if check_clash:
-    np.save(f'{save_prefix}cls.npy', np.array(clash_list)) 
-    print('mean cls: ', np.mean(clash_list))
+    np.save(f'{save_prefix}cls.npy', np.array(clash_list))
 if check_div:
-    np.save(f'{save_prefix}div.npy', np.array(div_list)) 
-    print('mean div: ', np.mean(div_list))
+    np.save(f'{save_prefix}div.npy', np.array(div_list))
           
 # save ordered list of trajs
 with open(f'{save_prefix}trj_list.pkl', "wb") as output_file:
