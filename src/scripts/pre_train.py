@@ -302,7 +302,8 @@ def main():
 
     trainer = pl.Trainer(max_epochs=config_args.eps - cur_epoch,
                          gradient_clip_val=config_args.grad_clip,
-                         default_root_dir=job_dir)
+                         default_root_dir=job_dir,
+                         strategy="ddp_find_unused_parameters_true")
     trainer.fit(module)
 
 
