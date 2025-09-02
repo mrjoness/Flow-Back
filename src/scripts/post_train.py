@@ -280,7 +280,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-    config_yaml = f"{FLOWBACK_BASE}/configs/config.yaml"
+    config_yaml = f"{FLOWBACK_BASE}/configs/pre_train.yaml"
 
     load_dir = config_args.load_dir
     CG_noise = config_args.CG_noise
@@ -392,6 +392,7 @@ if __name__ == "__main__":
         gradient_clip_val=grad_clip,
         accumulate_grad_batches=acc_grad_batch,
         accelerator="auto",
+        strategy='ddp_find_unused_parameters_true'
     )
     trainer.fit(module, train_loader)
 
