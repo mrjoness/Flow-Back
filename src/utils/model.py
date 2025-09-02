@@ -528,11 +528,12 @@ class StructureDataset(Dataset):
         return sample1, sample2, sample3, sample4, sample5, sample6
 
 class PostTrainDataset(Dataset):
-    def __init__(self, res_feats, atom_feats, ca_pos, mask):
+    def __init__(self, res_feats, atom_feats, ca_pos, mask, topologies):
         self.res_feats = res_feats
         self.atom_feats = atom_feats
         self.ca_pos = ca_pos
         self.mask = mask
+        self.topologies = topologies
 
     def __len__(self):
         return len(self.res_feats)  # Assuming both lists have the same length
@@ -542,8 +543,9 @@ class PostTrainDataset(Dataset):
         sample2 = torch.tensor(self.atom_feats[index], dtype=torch.int)
         sample3 = torch.tensor(self.ca_pos[index], dtype=torch.float32)
         sample4 = torch.tensor(self.mask[index], dtype=torch.bool)
-        
-        return sample1, sample2, sample3, sample4
+        sample5 = self.topologies[index]
+
+        return sample1, sample2, sample3, sample4, sample5
 
     
 def pro_res_to_ohe(string_list):
