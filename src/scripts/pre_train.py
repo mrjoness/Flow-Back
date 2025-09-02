@@ -81,6 +81,7 @@ class PreTrainModule(pl.LightningModule):
         self.valid_idxs = valid_idxs
         self.loss_list = []
         self.start_epoch = int(config_args.checkpoint)
+        self._epoch_losses = []
         if config_args.solver == 'euler_ff':
             self.rtp_data, self.lj_data, self.bond_data = get_ff_data()
 
@@ -143,13 +144,15 @@ class PreTrainModule(pl.LightningModule):
         else:
             loss = torch.mean(torch.abs(vt - ut))
 
+        self._epoch_losses.append(loss.detach())
         self.log('train_loss', loss, prog_bar=True, on_step=False, on_epoch=True,
                  batch_size=x1.size(0))
-        return {'loss': loss}
+        return loss
 
-    def training_epoch_end(self, outputs):
-        avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
+    def on_train_epoch_end(self):
+        avg_loss = torch.stack(self._epoch_losses).mean()
         self.loss_list.append(avg_loss.detach().cpu().item())
+        self._epoch_losses.clear()
         epoch = self.current_epoch + self.start_epoch
         np.save(f'{self.job_dir}/losses-epoch-{epoch}.npy', np.array(self.loss_list))
         torch.save(self.model.state_dict(), f'{self.job_dir}/state-{epoch}.pth')
