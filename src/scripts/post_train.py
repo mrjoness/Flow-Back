@@ -125,6 +125,9 @@ class PostTrainModule(pl.LightningModule):
     ) -> None:
         super().__init__()
         self.model = deepcopy(base_model)
+        # ensure the fine-tuning model has trainable parameters
+        self.model.requires_grad_(True)
+        self.model.train()
         self.v_base = base_model
         self.lr = lr
         self.wdecay = wdecay
