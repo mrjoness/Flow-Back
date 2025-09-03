@@ -115,6 +115,7 @@ class PostTrainModule(pl.LightningModule):
         cg_noise: float,
         num_steps: int,
         ff: str,
+        charmm_ff: str = "auto",
         int_ff: bool,
         max_grad: float,
         t_flip: float,
@@ -135,6 +136,7 @@ class PostTrainModule(pl.LightningModule):
         self.cg_noise = cg_noise
         self.num_steps = num_steps
         self.ff = ff
+        self.charmm_ff = charmm_ff
         self.int_ff = int_ff
         self.max_grad = max_grad
         self.t_flip = t_flip
@@ -188,6 +190,7 @@ class PostTrainModule(pl.LightningModule):
             "ca_pos": ca_pos.cpu().numpy(),
             "num_steps": self.num_steps,
             "ff": self.ff,
+            "charmm_ff": self.charmm_ff,
             "int_ff": self.int_ff,
             "max_grad": self.max_grad,
             "t_flip": self.t_flip,
@@ -373,6 +376,7 @@ if __name__ == "__main__":
         cg_noise=Ca_std,
         num_steps=num_steps,
         ff=ff,
+        charmm_ff=config_args.charmm_ff,
         int_ff=int_ff,
         max_grad=MAX_GRAD,
         t_flip=t_flip,

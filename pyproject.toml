@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flow-back"
+version = "0.1.0"
+description = "FlowBack & FlowBack-Adjoint"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "torch",
+    "mdtraj",
+    "pytorch-lightning",
+    "rdkit-pypi",
+    "openmm",
+    "scipy",
+    "pandas",
+    "egnn-pytorch",
+    "sidechainnet",
+    "matplotlib",
+    "tqdm"
+]
+
+[project.urls]
+Homepage = "https://github.com/mrjoness/Flow-Back"
+
+[tool.setuptools.packages.find]
+include = ["src*"]

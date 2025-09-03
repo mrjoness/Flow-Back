@@ -10,7 +10,7 @@ from openmm import *
 import os
 from openmm.app import *
 from openmm.unit import *
-import argparse 
+import argparse
 import tempfile
 import MDAnalysis as mda
 import subprocess
@@ -20,6 +20,7 @@ import gc
 from collections import defaultdict
 import io
 import time
+import re
 warnings.filterwarnings('ignore')
 
 def _osremove(f):
@@ -35,7 +36,40 @@ def compute_all_distances(traj):
     dists = md.compute_distances(traj, pairs)
     return dists
 
-    
+def _detect_charmm_ff():
+    gmxlibrary = os.environ.get("GMXLIB")
+    if gmxlibrary:
+        try:
+            entries = os.listdir(gmxlibrary)
+            ffs = [e for e in entries if e.lower().startswith("charmm") and e.endswith(".ff")]
+            if ffs:
+                def version_key(name):
+                    m = re.search(r"(\d+)", name)
+                    return int(m.group(1)) if m else 0
+                ffs.sort(key=version_key)
+                return ffs[-1].split('.')[0]
+            warnings.filterwarnings("always", category=UserWarning)
+            warnings.warn(
+                f"No CHARMM force fields detected in GMXLIB ('{gmxlibrary}'); defaulting to charmm27.",
+                UserWarning,
+            )
+            warnings.filterwarnings("ignore", category=UserWarning)
+        except Exception:
+            warnings.filterwarnings("always", category=UserWarning)
+            warnings.warn(
+                f"Failed to inspect GMXLIB directory '{gmxlibrary}'. Defaulting to charmm27.",
+                UserWarning,
+            )
+            warnings.filterwarnings("ignore", category=UserWarning)
+    else:
+        warnings.filterwarnings("always", category=UserWarning)
+        warnings.warn(
+            "$GMXLIB environment variable is not set. GROMACS cannot locate CHARMM force fields; defaulting to charmm27.",
+            UserWarning,
+        )
+        warnings.filterwarnings("ignore", category=UserWarning)
+    return "charmm27"
+
 class EnergyModel(torch.nn.Module):
     def __init__(self, energy_func, topology):
         super().__init__()
@@ -70,19 +104,21 @@ class EnergyFunction(torch.autograd.Function):
       
         return result, None, None, None  # Gradient w.r.t. input, ignore func
 
-def charmm_traj_to_energy(topology: md.Topology, xyz: np.ndarray):
+def charmm_traj_to_energy(topology: md.Topology, xyz: np.ndarray, ff_version: str = "auto"):
     gradients = np.zeros_like(xyz)
     energies = np.zeros(xyz.shape[0])
     for i in range(xyz.shape[0]):
-        energy, gradient = charmm_structure_to_energy(topology, xyz[i:i+1])  # External function call
+        energy, gradient = charmm_structure_to_energy(topology, xyz[i:i+1], ff_version=ff_version)  # External function call
         energies[i] = energy
         gradients[i] = gradient
     #Divide by ten to convert from angstroms to nm
     return energies, gradients * angstrom / nanometer
 
 # @time_elapsed
-def charmm_structure_to_energy(topology: md.Topology, xyz: np.ndarray, nonbonded=True):
+def charmm_structure_to_energy(topology: md.Topology, xyz: np.ndarray, nonbonded=True, ff_version: str = "auto"):
     t = md.Trajectory(xyz, topology)
+    if ff_version in (None, "auto"):
+        ff_version = _detect_charmm_ff()
     if np.max(compute_all_distances(t)) > 4 * t.top.n_residues ** 0.5:
         raise RuntimeError("Crazy Structure. Could Not Compute Energy")
     with tempfile.TemporaryDirectory(dir='/project2/andrewferguson/berlaga') as temp_dir:
@@ -94,7 +130,7 @@ def charmm_structure_to_energy(topology: md.Topology, xyz: np.ndarray, nonbonded
 
         commands = [
            "gmx_mpi", "pdb2gmx", "-f", pdb_file, "-o", structure_file, "-p", topology_file,
-            "-ff", "charmm27", "-water", "spce", "-ter", "-nobackup", "-quiet", "-i", f"{temp_dir}/posre"
+            "-ff", ff_version, "-water", "spce", "-ter", "-nobackup", "-quiet", "-i", f"{temp_dir}/posre"
         ]
         # process = subprocess.Popen(commands, stdin=subprocess.PIPE, text=True)
         process = subprocess.Popen(commands, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=1024 * 1024 * 8, text=True)

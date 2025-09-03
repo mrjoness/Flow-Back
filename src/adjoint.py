@@ -29,9 +29,10 @@ def stochastic_trajectory(v_finetune, sigma_t, **kwargs):
     t_flip = kwargs.get('t_flip')
     ca_pos = torch.tensor(kwargs.get('ca_pos'), device=device)
   
+    charmm_ff = kwargs.get('charmm_ff', 'auto')
     energy_funcs = {
         'RDKit': rdkit_traj_to_energy,
-        'CHARMM': charmm_traj_to_energy
+        'CHARMM': lambda topology, xyz: charmm_traj_to_energy(topology, xyz, ff_version=charmm_ff)
     }
     energy_func = energy_funcs[kwargs.get('ff')]
     
