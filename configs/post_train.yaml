@@ -32,6 +32,7 @@ acc_grad_batch: 16    # Accumulate gradients over N batches
 max_grad: 20          # Max gradient norm for clipping
 pdb_list: 'default'   # Optional list of training PDBs
 ff: 'CHARMM'          # Energy backend ('RDKit' or 'CHARMM')
+charmm_ff: 'auto'      # CHARMM force field version ('auto', 'charmm27', 'charmm36', ...)
 restart: False        # Resume training from save_dir
 int_ff: True          # Use internal FF parameters
 t_flip: 0.25          # Fraction of steps to attempt chirality flips

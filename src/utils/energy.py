@@ -10,16 +10,21 @@ from openmm import *
 import os
 from openmm.app import *
 from openmm.unit import *
-import argparse 
+import argparse
 import tempfile
 import MDAnalysis as mda
 import subprocess
 import warnings
-import psutil
 import gc
 from collections import defaultdict
 import io
 import time
+from pathlib import Path
+import shutil
+import re
+from file_config import FLOWBACK_BASE, FLOWBACK_FF
+from typing import Dict, List, Tuple, Optional
+
 warnings.filterwarnings('ignore')
 
 def _osremove(f):
@@ -35,7 +40,190 @@ def compute_all_distances(traj):
     dists = md.compute_distances(traj, pairs)
     return dists
 
-    
+
+
+
+_TOPLEVEL_SUBSECTIONS = {
+    "replace", "add", "delete"
+}
+
+_BLOCK_HEADER_RE = re.compile(r'^\[\s*([^\]]+?)\s*\]\s*$', re.MULTILINE)
+
+def _is_subsection(name: str) -> bool:
+    # Case-insensitive match for subsection keywords
+    return name.strip().lower() in _TOPLEVEL_SUBSECTIONS
+
+def _find_first_existing(files: List[Path], preferred_names: Tuple[str, ...]) -> List[Path]:
+    """Return files in priority order: any explicitly preferred names first (if present),
+    else all matching files as given."""
+    preferred = []
+    others = []
+    for f in files:
+        if f.name in preferred_names:
+            preferred.append(f)
+        else:
+            others.append(f)
+    # Try preferred ones first, but still consider others for missed entries
+    return preferred + others
+
+def _gather_ff_tdb_files(ff_dir: Path, suffix: str) -> List[Path]:
+    """Gather *.n.tdb or *.c.tdb files from a force field directory."""
+    return sorted(ff_dir.glob(f"*{suffix}.tdb"))
+
+def _extract_named_blocks_from_text(text: str, wanted_names: List[str]) -> Dict[str, str]:
+    """
+    Extract blocks by name from a .tdb file's text.
+    A block starts at a top-level header line: [ NAME ] where NAME is not a lowercase subsection.
+    The block ends just before the next top-level block header.
+    """
+    results: Dict[str, str] = {}
+    # Find all bracket headers with their positions
+    matches = list(_BLOCK_HEADER_RE.finditer(text))
+    # Precompute header names and which are top-level vs subsection
+    headers = []
+    for m in matches:
+        name = m.group(1).strip()
+        headers.append((name, m.start(), m.end(), not _is_subsection(name)))
+
+    # Iterate top-level headers and grab content until next top-level header
+    for i, (name, start, end, is_top) in enumerate(headers):
+        if not is_top:
+            continue
+        block_start = start
+        # Find next top-level header's start
+        j = i + 1
+        block_end = len(text)
+        while j < len(headers):
+            n2, s2, e2, is_top2 = headers[j]
+            if is_top2:
+                block_end = s2
+                break
+            j += 1
+        block_text = text[block_start:block_end].rstrip() + "\n"
+        # If this top-level name is one we want, and we don't already have it, store it
+        if name in wanted_names and name not in results:
+            results[name] = block_text
+
+    return results
+
+def _extract_blocks(ff_dir: Path,
+                    tdb_suffix: str,
+                    names_to_find: List[str],
+                    preferred_files: Tuple[str, ...]) -> Dict[str, str]:
+    """
+    Search across all matching *.tdb files (prioritizing names in preferred_files)
+    and extract the given block names.
+    """
+    candidates = _gather_ff_tdb_files(ff_dir, tdb_suffix)
+    if not candidates:
+        raise RuntimeError(f"No '*{tdb_suffix}.tdb' files found in '{ff_dir}'")
+
+    # Prioritize common merged filenames first (e.g., merged.n.tdb / merged.c.tdb)
+    ordered_files = _find_first_existing(candidates, preferred_files)
+
+    found: Dict[str, str] = {}
+    remaining = set(names_to_find)
+
+    for f in ordered_files:
+        if not remaining:
+            break
+        text = f.read_text()
+        blocks = _extract_named_blocks_from_text(text, list(remaining))
+        for k, v in blocks.items():
+            found[k] = v
+        remaining -= set(blocks.keys())
+
+    if remaining:
+        searched = ", ".join(p.name for p in ordered_files)
+        missing = ", ".join(sorted(remaining))
+        raise RuntimeError(
+            f"Missing required terminal entries [{missing}] in {tdb_suffix} databases. "
+            f"Searched files: {searched}"
+        )
+    return found
+
+def ensure_charmm_ff(version: str = 'auto') -> Path:
+    """Copy user's CHARMM force field into FLOWBACK_FF with merged termini
+    extracted directly from the force field's own terminal databases.
+    """
+    if version == 'auto' or version == 'charmm':
+        keyword = 'charmm'
+    else:
+        keyword = version
+
+    dest = Path(FLOWBACK_FF) / f"{keyword}.ff"
+    if dest.exists():
+        return dest
+
+    gmxlibrary = os.environ.get("GMXLIB")
+    if not gmxlibrary:
+        raise RuntimeError("$GMXLIB is not set; cannot locate CHARMM force field")
+
+    entries = [e for e in os.listdir(gmxlibrary)
+               if e.lower().startswith(keyword) and e.endswith(".ff")]
+    if not entries:
+        raise RuntimeError(f"No CHARMM force field found in GMXLIB '{gmxlibrary}'")
+
+    def version_key(name: str) -> int:
+        m = re.search(r"(\d+)", name)
+        return int(m.group(1)) if m else 0
+
+    entries.sort(key=version_key)
+    src = Path(gmxlibrary) / entries[-1]
+
+    # Copy the entire force field directory first
+    shutil.copytree(src, dest, dirs_exist_ok=True)
+
+    # Extract needed terminal blocks from the *source* FF (before we delete in dest)
+    # Prioritize merged files if present; still search others as fallback.
+    # N-termini: exact names
+    n_names = ["PRO-NH2+", "GLY-NH3+", "NH3+"]
+    n_blocks = _extract_blocks(
+        ff_dir=src,
+        tdb_suffix=".n",
+        names_to_find=n_names,
+        preferred_files=("merged.n.tdb",)
+    )
+
+    # C-terminus: prefer COO-. Some CHARMM packs may name the default negative terminus "CTER".
+    c_targets_ordered = ["COO-"]  # search order; we will pick the first found
+    c_blocks_all = _extract_blocks(
+        ff_dir=src,
+        tdb_suffix=".c",
+        names_to_find=c_targets_ordered,
+        preferred_files=("merged.c.tdb",)
+    )
+    # Choose COO- if present; otherwise use CTER
+    c_choice_name = "COO-" if "COO-" in c_blocks_all else "CTER"
+    c_block_text = c_blocks_all[c_choice_name]
+
+    # Now remove existing terminal DBs in the *destination* and write merged ones
+    for pattern in ("*.n.tdb", "*.c.tdb"):
+        for f in dest.glob(pattern):
+            try:
+                f.unlink()
+            except FileNotFoundError:
+                pass
+
+    # Write merged.n.tdb with the three N-terminus entries in a fixed order
+    merged_n_path = dest / "merged.n.tdb"
+    merged_n_text = ""
+    for name in n_names:
+        merged_n_text += n_blocks[name].rstrip() + "\n\n"
+    merged_n_path.write_text(merged_n_text.rstrip() + "\n")
+
+    # Write merged.c.tdb with the chosen C-terminus entry
+    merged_c_path = dest / "merged.c.tdb"
+    merged_c_path.write_text(c_block_text)
+
+    return dest
+
+
+
+
+
+
+
 class EnergyModel(torch.nn.Module):
     def __init__(self, energy_func, topology):
         super().__init__()
@@ -70,41 +258,52 @@ class EnergyFunction(torch.autograd.Function):
       
         return result, None, None, None  # Gradient w.r.t. input, ignore func
 
-def charmm_traj_to_energy(topology: md.Topology, xyz: np.ndarray):
+def charmm_traj_to_energy(topology: md.Topology, xyz: np.ndarray, ff_version: str = "auto"):
     gradients = np.zeros_like(xyz)
     energies = np.zeros(xyz.shape[0])
     for i in range(xyz.shape[0]):
-        energy, gradient = charmm_structure_to_energy(topology, xyz[i:i+1])  # External function call
+        energy, gradient = charmm_structure_to_energy(topology, xyz[i:i+1], ff_version=ff_version)  # External function call
         energies[i] = energy
         gradients[i] = gradient
     #Divide by ten to convert from angstroms to nm
     return energies, gradients * angstrom / nanometer
 
 # @time_elapsed
-def charmm_structure_to_energy(topology: md.Topology, xyz: np.ndarray, nonbonded=True):
+def charmm_structure_to_energy(topology: md.Topology, xyz: np.ndarray, nonbonded=True, ff_version: str = "auto"):
     t = md.Trajectory(xyz, topology)
+    ff_dir = ensure_charmm_ff(ff_version)
     if np.max(compute_all_distances(t)) > 4 * t.top.n_residues ** 0.5:
         raise RuntimeError("Crazy Structure. Could Not Compute Energy")
     with tempfile.TemporaryDirectory(dir='/project2/andrewferguson/berlaga') as temp_dir:
         pdb_file = f'{temp_dir}/temp.pdb'
         structure_file = f"{temp_dir}/structure.gro"
         topology_file = f"{temp_dir}/topol.top"
+        
         t.save_pdb(pdb_file)
-
-
+        t.save_pdb(f'{FLOWBACK_BASE}/debug.pdb')
         commands = [
            "gmx_mpi", "pdb2gmx", "-f", pdb_file, "-o", structure_file, "-p", topology_file,
-            "-ff", "charmm27", "-water", "spce", "-ter", "-nobackup", "-quiet", "-i", f"{temp_dir}/posre"
+            "-ff", ff_dir.stem, "-water", "spce", "-ter", "-nobackup", "-quiet", "-i", f'{temp_dir}/posre.itp'
         ]
-        # process = subprocess.Popen(commands, stdin=subprocess.PIPE, text=True)
-        process = subprocess.Popen(commands, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=1024 * 1024 * 8, text=True)
-
+        env = os.environ.copy()
+        env["GMXLIB"] = str(ff_dir.parent)
+        process = subprocess.Popen(
+            commands,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=1024 * 1024 * 8,
+            text=True,
+            env=env,
+        )
+        
+        
         stdout, stderr = process.communicate('0\n0\n')
         if process.returncode != 0:
             print(f"Energy calculation failed at pdb2gmx step. Error:\n{stderr}")
             return np.zeros_like(xyz)
-       
-        _osremove('posre.itp')
+        shutil.copyfile(topology_file, f'{FLOWBACK_BASE}/topol.top')
+        shutil.copyfile(structure_file, f'{FLOWBACK_BASE}/structure.gro')
         index_map = _map_original_to_processed_indices(pdb_file, structure_file)
         gro = GromacsGroFile(structure_file)
         original_box = gro.getPeriodicBoxVectors()
@@ -113,8 +312,12 @@ def charmm_structure_to_energy(topology: md.Topology, xyz: np.ndarray, nonbonded
             original_box[1] + Vec3(0, 2, 0) * nanometer,
             original_box[2] + Vec3(0, 0, 2) * nanometer,
         )
-        
-        topology = GromacsTopFile(topology_file, periodicBoxVectors=expanded_box, includeDir=temp_dir)
+        topology = GromacsTopFile(
+            topology_file,
+            periodicBoxVectors=expanded_box,
+            includeDir=str(ff_dir)
+            # includeDir=[temp_dir, ff_dir.parent],
+        )
         # Create simulation system
         
         system = topology.createSystem(nonbondedMethod=PME, nonbondedCutoff=1.0*nanometer,
@@ -178,7 +381,6 @@ def charmm_structure_to_energy(topology: md.Topology, xyz: np.ndarray, nonbonded
         system.addForce(new_torsion_force)
         system.addForce(new_custom_torsion_force)
 
-        
         # Set integrator
         integrator = LangevinMiddleIntegrator(300*kelvin, 1/picosecond, 0.002*picoseconds)
         context = Context(system, integrator)
@@ -189,7 +391,6 @@ def charmm_structure_to_energy(topology: md.Topology, xyz: np.ndarray, nonbonded
         forces = state.getForces(asNumpy=True)[index_map] 
   
         energy = state.getPotentialEnergy()
-
 
     return energy.value_in_unit(kilojoules_per_mole), -1 * forces
 

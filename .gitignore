@@ -1,3 +1,8 @@
-# Ignore Python cache files
+# Ignore Python cache files and bytecode
 __pycache__/
-*.pyc
+*.py[cod]
+
+# Packaging
+*.egg-info
+dist/
+.venv/

@@ -23,6 +23,7 @@ from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
 
 from file_config import FLOWBACK_BASE, FLOWBACK_DATA, FLOWBACK_JOBDIR
+from src.utils.energy import ensure_charmm_ff
 from src.adjoint import (
     adjoint_matching_loss,
     sigma,
@@ -115,6 +116,7 @@ class PostTrainModule(pl.LightningModule):
         cg_noise: float,
         num_steps: int,
         ff: str,
+        charmm_ff: str,
         int_ff: bool,
         max_grad: float,
         t_flip: float,
@@ -135,6 +137,7 @@ class PostTrainModule(pl.LightningModule):
         self.cg_noise = cg_noise
         self.num_steps = num_steps
         self.ff = ff
+        self.charmm_ff = charmm_ff
         self.int_ff = int_ff
         self.max_grad = max_grad
         self.t_flip = t_flip
@@ -188,6 +191,7 @@ class PostTrainModule(pl.LightningModule):
             "ca_pos": ca_pos.cpu().numpy(),
             "num_steps": self.num_steps,
             "ff": self.ff,
+            "charmm_ff": self.charmm_ff,
             "int_ff": self.int_ff,
             "max_grad": self.max_grad,
             "t_flip": self.t_flip,
@@ -308,6 +312,7 @@ if __name__ == "__main__":
 
     MAX_GRAD = getattr(config_args, "max_grad", 5e3)
     t_flip = getattr(config_args, "t_flip", 0.55)
+    charmm_ff = getattr(config_args, "charmm_ff", "auto")
 
     job_dir = f"{FLOWBACK_JOBDIR}/{save_dir}_post"
     os.makedirs(job_dir, exist_ok=True)
@@ -316,7 +321,8 @@ if __name__ == "__main__":
 
     ff = "CHARMM" if getattr(config_args, "ff", "RDKit") == "CHARMM" else "RDKit"
     int_ff = getattr(config_args, "int_ff", False)
-
+    if ff == 'CHARMM':
+        ensure_charmm_ff(charmm_ff)
     acc_grad_batch = getattr(config_args, "acc_grad_batch", 1)
 
     all_dirs = load_dir.split()
@@ -373,6 +379,7 @@ if __name__ == "__main__":
         cg_noise=Ca_std,
         num_steps=num_steps,
         ff=ff,
+        charmm_ff=config_args.charmm_ff,
         int_ff=int_ff,
         max_grad=MAX_GRAD,
         t_flip=t_flip,

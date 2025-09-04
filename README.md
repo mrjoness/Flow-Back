@@ -9,13 +9,16 @@
 ## Installation
 
 ### Env setup
+Clone the repo and run the setup script to create and activate a local virtual environment using `pip`:
+
     git clone https://github.com/mrjoness/Flow-Back.git
-    conda create -n flowback python=3.12
-    conda activate flowback
-    pip install egnn_pytorch   # installs torch-2.3 + cu12-12; verify CUDA/Torch compatibility
-    pip install -c conda-forge openmm sidechainnet
-    conda install mdtraj matplotlib pandas
-    conda install conda-forge::tqdm
+    cd Flow-Back
+    source setup.sh
+
+If you prefer Conda, use the provided environment specification instead:
+
+    conda env create -f environment.yml
+    conda activate flowback_env
 
 All commands below use the pattern:
 
@@ -50,7 +53,7 @@ Download training PDBs and pre-processed features from:
 
     https://zenodo.org/records/13375392
 
-Unzip and move `train_features` into the working directory. Edit `configs/pre_train.yaml` to specify `load_path` and `top_path` for the feature and topology pickles.
+Unzip and move `train_features` into the "inputs" folder of the working directory. Edit `configs/pre_train.yaml` to specify `load_path` and `top_path` for the feature and topology pickles.
 
 Run pre-training:
 
@@ -61,6 +64,8 @@ Run pre-training:
 ## Post-Training with FlowBack-Adjoint (Energy-Guided)
 
 **Goal**: Refine a pre-trained FlowBack model by incorporating **energy terms** in an adjoint matching objective. Edit `configs/post_train.yaml` to choose the energy backend (`ff`), energy-loss weight (`lam`), and other training hyperparameters.
+
+If `ff` is set to `CHARMM`, ensure that both GROMACS and the desired CHARMM force field are installed; they are required to compute CHARMM energies during post-training.
 
 Run post-training:
 

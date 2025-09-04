@@ -72,7 +72,7 @@ save_dir_cfg = config_args.save_dir
 external = config_args.external
 
 if save_dir_cfg == '':
-    save_dir = f'../outputs/{load_dir}'
+    save_dir = f'{FLOWBACK_OUTPUTS}/{load_dir}'
     if solver == 'euler_ff':
         save_prefix = f'{save_dir}/{model_path.split("/")[-1]}_ckp-{ckp}_noise-{CG_noise}_chi_{t_flip}/'
     elif solver == 'euler':

@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from file_config import FLOWBACK_DATA, FLOWBACK_OUTPUTS
-from src.utils.energy import charmm_structure_to_energy
+from src.utils.energy import charmm_structure_to_energy, ensure_charmm_ff
 
 
 
@@ -148,7 +148,7 @@ def main():
     )
 
     args = parser.parse_args()
-
+    ensure_charmm_ff()
     pdb_paths = gather_pdb_paths(args)
     output_file = default_output_name(args)
     run_energy_pipeline(pdb_paths, output_file, args.save_dict)
