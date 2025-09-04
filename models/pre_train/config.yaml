@@ -1,0 +1,40 @@
+device: 'cuda'
+fmsigma: 0.005
+batch: 1
+CG_noise: 0.003
+eps: 301
+evalf: 10
+lr: 0.001
+wdecay: 0.0
+lrdecay: 0.0
+depth: 6
+nneigh: 15
+dim: 32
+loss: 'L1'
+mdim: 32
+clamp: 2
+attnevery: 0
+CGadj: 0.0
+system: 'pro'
+pos: 0
+solver: 'euler'
+batch_pack: 'max'
+diff_type: 'xt'
+load_path: 'train_features/feats_pro_0-1000_all_max-8070.pkl'
+top_path: 'train_features/tops_pro_0-1000_all.pkl'
+sym: 'e3'
+sym_rep: 1
+mask_prior: False
+pos_cos: 1000
+seq_feats: 4
+seq_decay: 100
+act: 'SiLU'
+grad_clip: 0.0
+mask_prior: True  # Whether to use masked prior distribution
+max_train: 100000 #max num of training proteins
+max_val: 100 #max num of validation proteins
+max_atoms: 8070
+atom_dim: 37
+res_dim: 21
+checkpoint: 0
+save_dir: 'big_model'
