@@ -73,12 +73,23 @@ Run post-training:
 
 ---
 
+## Running `run_energies` on evaluation outputs
+
+After you've generated PDB files via evaluation, compute their CHARMM energies with:
+```
+python -m src.scripts.run_energies --data PDB_example --model post_train --checkpoint 7000 --noise 0.003
+```
+The script searches `outputs/PDB_example` for a directory matching
+`post_train_ckp-7000_noise-0.003/`, processes all contained .pdb files, and saves the resulting energy array to `outputs/energies/energies_PDB_example_post_train_ckp-7000_noise-0.003.npy`.
+
 ## Cite as
 
-    @inproceedings{jones24flowback,
-      title={FlowBack: A Flow-matching Approach for Generative Backmapping of Macromolecules},
-      author={Jones, Michael and Khanna, Smayan and Ferguson, Andrew},
-      booktitle={ICML'24 Workshop ML for Life and Material Science: From Theory to Industry Applications}
+    @article{jones2025flowback,
+      title={FlowBack: A Generalized Flow-Matching Approach for Biomolecular Backmapping},
+      author={Jones, Michael S and Khanna, Smayan and Ferguson, Andrew L},
+      journal={Journal of Chemical Information and Modeling},
+      year={2025},
+      publisher={ACS Publications}
     }
 
     @misc{berlaga2025flowbackadjointphysicsawareenergyguidedconditional,
