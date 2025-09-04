@@ -22,7 +22,7 @@ import time
 from pathlib import Path
 import shutil
 import re
-from file_config import FLOWBACK_BASE, FLOWBACK_FF
+from src.file_config import FLOWBACK_BASE, FLOWBACK_FF
 from typing import Dict, List, Tuple, Optional
 
 warnings.filterwarnings('ignore')
@@ -280,7 +280,6 @@ def charmm_structure_to_energy(topology: md.Topology, xyz: np.ndarray, nonbonded
         topology_file = f"{temp_dir}/topol.top"
         
         t.save_pdb(pdb_file)
-        t.save_pdb(f'{FLOWBACK_BASE}/debug.pdb')
         commands = [
            "gmx_mpi", "pdb2gmx", "-f", pdb_file, "-o", structure_file, "-p", topology_file,
             "-ff", ff_dir.stem, "-water", "spce", "-ter", "-nobackup", "-quiet", "-i", f'{temp_dir}/posre.itp'
@@ -302,8 +301,6 @@ def charmm_structure_to_energy(topology: md.Topology, xyz: np.ndarray, nonbonded
         if process.returncode != 0:
             print(f"Energy calculation failed at pdb2gmx step. Error:\n{stderr}")
             return np.zeros_like(xyz)
-        shutil.copyfile(topology_file, f'{FLOWBACK_BASE}/topol.top')
-        shutil.copyfile(structure_file, f'{FLOWBACK_BASE}/structure.gro')
         index_map = _map_original_to_processed_indices(pdb_file, structure_file)
         gro = GromacsGroFile(structure_file)
         original_box = gro.getPeriodicBoxVectors()

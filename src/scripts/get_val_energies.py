@@ -1,7 +1,7 @@
 ### input directory to pdbs/trajs and return N generated samples of each ###
 import re
 import os
-from file_config import FLOWBACK_JOBDIR, FLOWBACK_DATA, FLOWBACK_OUTPUTS, FLOWBACK_MODELS
+from src.file_config import FLOWBACK_JOBDIR, FLOWBACK_DATA, FLOWBACK_OUTPUTS, FLOWBACK_MODELS
 from collections import defaultdict
 import argparse
 import glob

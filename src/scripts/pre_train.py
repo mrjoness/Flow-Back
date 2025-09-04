@@ -1,6 +1,6 @@
 from src.utils.model import *
 from src.conditional_flow_matching import ConditionalFlowMatcher
-from file_config import FLOWBACK_JOBDIR, FLOWBACK_INPUTS, FLOWBACK_BASE
+from src.file_config import FLOWBACK_JOBDIR, FLOWBACK_INPUTS, FLOWBACK_BASE
 import pickle as pkl
 from torch.optim.lr_scheduler import StepLR
 import torch

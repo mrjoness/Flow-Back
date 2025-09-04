@@ -10,7 +10,7 @@ import yaml
 import argparse
 from argparse import ArgumentParser
 
-from file_config import FLOWBACK_OUTPUTS, FLOWBACK_DATA, FLOWBACK_MODELS, FLOWBACK_BASE
+from src.file_config import FLOWBACK_OUTPUTS, FLOWBACK_DATA, FLOWBACK_MODELS, FLOWBACK_BASE
 
 # need to test these for preproccessing
 from src.utils.evaluation import *
@@ -74,11 +74,11 @@ external = config_args.external
 if save_dir_cfg == '':
     save_dir = f'{FLOWBACK_OUTPUTS}/{load_dir}'
     if solver == 'euler_ff':
-        save_prefix = f'{save_dir}/{model_path.split("/")[-1]}_ckp-{ckp}_noise-{CG_noise}_chi_{t_flip}/'
+        save_prefix = f'{save_dir}/{model_path.split("/")[-1]}_ckp-{ckp}_noise-{CG_noise}/'
     elif solver == 'euler':
         save_prefix = f'{save_dir}/{model_path.split("/")[-1]}_ckp-{ckp}_euler_noise-{CG_noise}/'
     elif solver == 'euler_chi':
-        save_prefix = f'{save_dir}/{model_path.split("/")[-1]}_ckp-{ckp}_euler_noise-{CG_noise}_chi_{t_flip}/'
+        save_prefix = f'{save_dir}/{model_path.split("/")[-1]}_ckp-{ckp}_euler_noise-{CG_noise}/'
 else:
     save_dir = save_dir_cfg + '/'
     save_prefix = save_dir_cfg + '/'

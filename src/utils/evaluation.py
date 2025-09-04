@@ -1,5 +1,5 @@
 import os, tempfile
-from file_config import FLOWBACK_OUTPUTS
+from src.file_config import FLOWBACK_OUTPUTS
 from .model import *
 import yaml
 import glob

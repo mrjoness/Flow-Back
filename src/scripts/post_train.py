@@ -22,7 +22,7 @@ from tqdm import tqdm
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
 
-from file_config import FLOWBACK_BASE, FLOWBACK_DATA, FLOWBACK_JOBDIR
+from src.file_config import FLOWBACK_BASE, FLOWBACK_DATA, FLOWBACK_JOBDIR
 from src.utils.energy import ensure_charmm_ff
 from src.adjoint import (
     adjoint_matching_loss,
