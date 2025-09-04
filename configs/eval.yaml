@@ -16,5 +16,5 @@ vram: 32               # Approximate GPU memory (GB) for auto-batching
 save_traj: false       # Save full ODE trajectories
 save_dcd: false        # Also save trajectories as DCD
 overwrite: false       # Overwrite existing outputs
-t_flip: 0.2            # Fraction of steps to attempt chirality flips
+t_flip: 0.25           # Fraction of steps to attempt chirality flips
 type_flip: 'ref-ter'   # Chirality flipping scheme

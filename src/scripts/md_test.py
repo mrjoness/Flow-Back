@@ -11,7 +11,7 @@ import glob
 import mdtraj as md
 import MDAnalysis as mda
 from collections import defaultdict
-from file_config import FLOWBACK_DATA, FLOWBACK_OUTPUTS
+from src.file_config import FLOWBACK_DATA, FLOWBACK_OUTPUTS
 
 def _osremove(f):
     try:

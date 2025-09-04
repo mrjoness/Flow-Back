@@ -3,7 +3,7 @@ import glob
 import mdtraj as md
 import pickle as pkl
 
-from file_config import FLOWBACK_INPUTS
+from src.file_config import FLOWBACK_INPUTS
 from src.utils.model import get_pro_ohes, get_aa_to_cg
 
 parser = argparse.ArgumentParser()

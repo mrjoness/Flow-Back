@@ -22,7 +22,7 @@ import time
 from pathlib import Path
 import shutil
 import re
-from file_config import FLOWBACK_BASE, FLOWBACK_FF
+from src.file_config import FLOWBACK_BASE, FLOWBACK_FF
 from typing import Dict, List, Tuple, Optional
 
 warnings.filterwarnings('ignore')
