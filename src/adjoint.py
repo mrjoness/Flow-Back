@@ -7,9 +7,7 @@ from datetime import datetime
 import numpy as np
 import mdtraj as md
 import os
-import psutil
 import gc
-from memory_profiler import profile
 from .utils.chi import *
 from copy import deepcopy
 

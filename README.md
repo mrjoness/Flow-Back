@@ -13,12 +13,12 @@ Clone the repo and run the setup script to create and activate a local virtual e
 
     git clone https://github.com/mrjoness/Flow-Back.git
     cd Flow-Back
-    source scripts/setup.sh
+    source setup.sh
 
 If you prefer Conda, use the provided environment specification instead:
 
     conda env create -f environment.yml
-    conda activate flowback
+    conda activate flowback_env
 
 All commands below use the pattern:
 
@@ -53,7 +53,7 @@ Download training PDBs and pre-processed features from:
 
     https://zenodo.org/records/13375392
 
-Unzip and move `train_features` into the working directory. Edit `configs/pre_train.yaml` to specify `load_path` and `top_path` for the feature and topology pickles.
+Unzip and move `train_features` into the "inputs" folder of the working directory. Edit `configs/pre_train.yaml` to specify `load_path` and `top_path` for the feature and topology pickles.
 
 Run pre-training:
 
