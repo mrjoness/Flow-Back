@@ -5,7 +5,6 @@ import pickle as pkl
 
 from src.file_config import FLOWBACK_INPUTS
 from src.utils.model import get_pro_ohes, get_aa_to_cg
-
 parser = argparse.ArgumentParser()
 parser.add_argument('--pdb_dir', type=str, help='Load pdbs from this dir')
 parser.add_argument('--save_name', type=str, help='Save name for output features and tops')
