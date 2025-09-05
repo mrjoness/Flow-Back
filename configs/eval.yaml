@@ -1,0 +1,20 @@
+CG_noise: 0.003        # Std. deviation of initial atom noise
+n_gens: 1              # Number of samples per input structure
+solver: 'euler_ff'     # ODE solver ('euler', 'euler_ff', 'euler_chi')
+stride: 1              # Subsample factor for input trajectories
+check_clash: false     # Evaluate steric clashes
+check_bonds: false     # Evaluate bond satisfaction
+check_div: false       # Evaluate diversity across generations
+mask_prior: false      # Keep CG coordinates fixed during inference
+retain_AA: false       # Use original AA coordinates for scoring
+tolerance: 3e-5        # ODE solver tolerance
+nsteps: 100            # Number of integration steps
+system: 'pro'          # System type ('pro' or 'DNApro')
+save_dir: ''           # Optional explicit output directory
+external: false        # Treat load_dir as absolute path
+vram: 32               # Approximate GPU memory (GB) for auto-batching
+save_traj: false       # Save full ODE trajectories
+save_dcd: false        # Also save trajectories as DCD
+overwrite: false       # Overwrite existing outputs
+t_flip: 0.25           # Fraction of steps to attempt chirality flips
+type_flip: 'ref-ter'   # Chirality flipping scheme

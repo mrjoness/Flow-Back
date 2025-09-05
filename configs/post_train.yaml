@@ -1,0 +1,38 @@
+# Post-training configuration for FlowBack-Adjoint
+load_dir: "1FME 2WAV lambda NTL9 chignolin 2JOF NuG2 UVF A3D" # Input PDB IDs or directory
+CG_noise: 0.003   # Std. deviation of prior noise
+ckp: 15           # Starting checkpoint of the base model
+n_gens: 1         # Generated samples per structure
+stride: 1         # Trajectory stride when loading data
+batch: 1          # Worst-case batch size
+evalf: 10         # Evaluate loss every N steps
+
+mask_prior: False  # Enforce CG positions remain the same
+retain_AA: False   # Hold AA positions for scoring
+
+model_path: "models/pre_train"  # Path to pre-trained model
+nsteps: 100         # Number of steps in Euler integrator
+n_epochs: 20        # Number of fine-tuning epochs
+
+lr: 0.00001    # Learning rate for optimizer
+wdecay: 0.0    # Weight decay
+grad_clip: 0.0 # Gradient clipping threshold
+
+vram: 16       # Approx. GPU VRAM (GB) for auto-batching
+
+n_samples: 100        # Structures drawn per epoch for energy eval
+
+num_steps: 100        # ODE steps for energy evaluation
+selection_split: 0.8  # After this number, all steps are calculated for adjoint loss. Before, steps are randomly sampled (see appendix of Domingo Enrich, et al. 2025).
+
+lam: 0.01      # Weight of energy guidance term
+
+save_dir: 'adjoint'   # Output directory for checkpoints
+acc_grad_batch: 16    # Accumulate gradients over N batches
+max_grad: 20          # Max gradient norm for clipping
+pdb_list: 'default'   # Optional list of training PDBs
+ff: 'CHARMM'          # Energy backend ('RDKit' or 'CHARMM')
+charmm_ff: 'auto'      # CHARMM force field version ('auto', 'charmm27', 'charmm36', ...)
+restart: False        # Resume training from save_dir
+int_ff: True          # Use internal FF parameters
+t_flip: 0.25          # Fraction of steps to attempt chirality flips

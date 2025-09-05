@@ -1,0 +1,8 @@
+# Ignore Python cache files and bytecode
+__pycache__/
+*.py[cod]
+
+# Packaging
+*.egg-info
+dist/
+.venv/
