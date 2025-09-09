@@ -49,11 +49,11 @@ Backmap a short (10-frame) CG trajectory:
 
 ## Pre-Training (base FlowBack)
 
-Download training PDBs and pre-processed features from:
+Download training PDBs, post-training PDBs, force-field parameters, and pre-processed features from:
 
-    https://zenodo.org/records/13375392
+    https://zenodo.org/records/17081237
 
-Unzip and move `train_features` into the "inputs" folder of the working directory. Edit `configs/pre_train.yaml` to specify `load_path` and `top_path` for the feature and topology pickles.
+Unzip and move `train_features` into the "inputs" folder of the working directory. Move post-training PDBs into the `data` folder. Edit `configs/pre_train.yaml` to specify `load_path` and `top_path` for the feature and topology pickles.
 
 Run pre-training:
 
