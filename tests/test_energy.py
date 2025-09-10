@@ -10,7 +10,8 @@ import numpy as np
 import torch
 import mdtraj as md
 
-from src.utils.energy import compute_all_distances, EnergyModel
+from src.utils.energy_helpers import compute_all_distances
+from src.utils.energy import EnergyModel
 
 def _create_simple_traj():
     top = md.Topology()
