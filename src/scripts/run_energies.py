@@ -5,7 +5,8 @@ import numpy as np
 from pathlib import Path
 
 from src.file_config import FLOWBACK_OUTPUTS
-from src.utils.energy import charmm_structure_to_energy, ensure_charmm_ff
+from src.utils.energy import charmm_structure_to_energy
+from src.utils.energy_helpers import ensure_charmm_ff
 
 
 def compute_energy(pdb_path: str) -> float | None:
