@@ -2,7 +2,7 @@ import os
 import re
 import shutil
 import warnings
-from collections import defaultdict
+from collections import defaultdict, Counter
 from pathlib import Path
 from typing import Dict, List, Tuple
 import MDAnalysis as mda
@@ -11,7 +11,10 @@ import numpy as np
 from openmm import NonbondedForce
 from openmm.unit import elementary_charge, kilojoule_per_mole
 from src.file_config import FLOWBACK_FF
-
+from pdbfixer import PDBFixer
+from openmm import *
+from openmm.app import *
+from openmm.unit import *
 
 def _osremove(f):
     try:
@@ -162,3 +165,66 @@ def silence_atoms_and_shift_charge(nbforce, topology, mute, context=None):
             nbforce.setExceptionParameters(k, i, j, qi*qj, sigma, eps)
     if context is not None:
         nbforce.updateParametersInContext(context)
+
+def atom_key(atom):
+    """Stable identity key for set-diff. Avoids relying on indices."""
+    chain = atom.residue.chain
+    chain_id = getattr(chain, "id", None)
+    res_id   = getattr(atom.residue, "id", None)
+    # Fallbacks if IDs are None
+    if chain_id is None:
+        chain_id = f"chain#{chain.index}"
+    if res_id is None:
+        res_id = f"res#{atom.residue.index}"
+    return (str(chain_id), str(res_id), atom.residue.name, atom.name)
+
+def counter_from_topology(top):
+    """Multiset of atoms keyed by identity + a lookup to final indices."""
+    ctr = Counter()
+    idx_lookup = defaultdict(list)
+    for a in top.atoms():
+        k = atom_key(a)
+        ctr[k] += 1
+        idx_lookup[k].append(a.index)
+    return ctr, idx_lookup
+
+def diff_added_atoms(ctr_before, ctr_after, idx_lookup_after):
+    """Return list of (final_index, chain_id, res_id, resname, atomname) for added atoms."""
+    added = []
+    added_idxs = []
+    for k, n_after in ctr_after.items():
+        n_before = ctr_before.get(k, 0)
+        if n_after > n_before:
+            # take exactly the extra occurrences' indices from the end of the list
+            new_count = n_after - n_before
+            new_indices = idx_lookup_after[k][-new_count:]
+            chain_id, res_id, resname, atomname = k
+            for idx in new_indices:
+                added.append((idx, chain_id, res_id, resname, atomname))
+                added_idxs.append(idx)
+    # sort by final index for readability
+    return sorted(added, key=lambda x: x[0]), added_idxs
+
+def reset_nonH_nonOXT_positions(sim: Simulation, ref_positions):
+    """
+    Reset positions of all atoms that are NOT hydrogens and NOT named 'OXT'
+    to their coordinates in `ref_positions`.
+
+    Args:
+        sim: OpenMM Simulation with current context.
+        ref_positions: Quantity[n_atoms,3] of reference coordinates (e.g. from the start).
+    """
+    # Get current positions from simulation
+    state = sim.context.getState(getPositions=True)
+    pos = state.getPositions(asNumpy=True)  # Quantity in nm
+    heavy_idxs = np.ones(sim.topology.getNumAtoms())
+
+    # Loop over topology atoms and reset conditionally
+    for atom in sim.topology.atoms():
+        if atom.element.symbol != "H" and atom.name != "OXT":
+            pos[atom.index] = ref_positions[atom.index]
+            heavy_idxs[atom.index] = 0
+
+    # Write updated positions back
+    sim.context.setPositions(pos)
+    return heavy_idxs

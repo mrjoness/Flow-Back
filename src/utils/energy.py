@@ -10,16 +10,10 @@ from openmm.app import *
 from openmm.unit import *
 import tempfile
 import subprocess
-from .energy_helpers import compute_all_distances, ensure_charmm_ff, _map_original_to_processed_indices, silence_atoms_and_shift_charge
+from .energy_helpers import *
 import warnings
 
 warnings.filterwarnings('ignore')
-
-
-
-
-
-
 
 
 class EnergyModel(torch.nn.Module):
@@ -229,5 +223,105 @@ def rdkit_structure_to_energy(topology: md.Topology, xyz: np.ndarray):
     # gradients = torch.from_numpy(gradients)
     return energy, gradients.reshape(-1, 3)
 
-# @time_elapsed
+def amber_solv_traj_to_energy(topology: md.Topology, xyz: np.ndarray):
+    gradients = np.zeros_like(xyz)
+    energies = np.zeros(xyz.shape[0])
+    for i in range(xyz.shape[0]):
+        energy, gradient = amber_solv_structure_to_energy(topology, xyz[i:i+1])  # External function call
+        energies[i] = energy
+        gradients[i] = gradient
+    return energies, gradients * angstrom / nanometer
 
+def amber_solv_structure_to_energy(topology: md.Topology, xyz: np.ndarray):
+    t = md.Trajectory(xyz, topology)
+    
+    with tempfile.TemporaryDirectory() as temp_dir:
+        t.save_pdb(f'{temp_dir}/temp.pdb')
+        pdb_file = PDBFile(f'{temp_dir}/temp.pdb')
+    # --- AMBER14 with implicit solvent (GBn2) ---
+    ff = ForceField("amber14-all.xml", "implicit/gbn2.xml")
+    fixer = PDBFixer(filename=pdb_file)
+    fixer.findMissingResidues()
+    fixer.findNonstandardResidues()
+    fixer.replaceNonstandardResidues()
+    
+    # ---- Example usage ----
+    # Build OpenMM objects from the fixed structure
+    topology  = fixer.topology
+    positions = fixer.positions
+    
+    # Snapshot BEFORE adding atoms
+    fixer.findMissingAtoms()
+    ctr0, _ = counter_from_topology(fixer.topology)
+    
+    fixer.addMissingAtoms()
+    
+    # Snapshot AFTER addMissingAtoms, BEFORE hydrogens
+    ctr1, idx_after_atoms = counter_from_topology(fixer.topology)
+    added_heavy, added_heavy_idxs = diff_added_atoms(ctr0, ctr1, idx_after_atoms)
+    
+    fixer.addMissingHydrogens(pH=7.0)
+    
+    # Snapshot AFTER hydrogens
+    ctr2, idx_after_H = counter_from_topology(fixer.topology)
+    added_h, added_h_idxs = diff_added_atoms(ctr1, ctr2, idx_after_H)
+    # Define the output PDB filename
+    # output_pdb_file = 'structure.pdb'
+    
+    # Write the PDB file
+    # PDBFile.writeFile(fixer.topology, fixer.positions, open(output_pdb_file, 'w'))
+    
+    # print(f"\nAdded {len(added_h)} hydrogens:")
+    system = ff.createSystem(
+        topology,
+        nonbondedMethod=NoCutoff,   # implicit solvent: NoCutoff / CutoffNonPeriodic / CutoffPeriodic only
+        constraints=HBonds
+    )
+    
+    added_idxs = np.concatenate([added_heavy_idxs, added_h_idxs])
+
+    move_set = set(added_idxs)  # e.g., all hydrogens + all atoms in N- and C-termini
+    # Build a 0/1 mask per DoF (1 = movable, 0 = frozen)
+    n = system.getNumParticles()
+    mask_vecs = [Vec3(1,1,1) if i in move_set else Vec3(0,0,0) for i in range(n)]
+    
+    # Custom "minimizer" integrator: naive steepest descent with a tiny step
+    integ = CustomIntegrator(0.0)
+    integ.addPerDofVariable("m", 0)         # per-DoF mask
+    integ.addGlobalVariable("alpha", 1e-7)  # small step size (nm / (kJ/mol/nm)); tuned empirically
+    integ.addComputePerDof("x", "x + alpha*m*f")
+    integ.addConstrainPositions()
+    
+    # IMPORTANT: set the mask AFTER Simulation is created
+    integ.setPerDofVariableByName("m", mask_vecs)
+
+    platform = None
+    platform_props = {}
+    for name, props in [
+        ("CUDA", {"DeviceIndex": "0", "Precision": "mixed", "DeterministicForces": "true"}),
+        ("OpenCL", {"DeviceIndex": "0", "Precision": "single"}),
+        ("CPU", {}),
+    ]:
+        try:
+            platform = Platform.getPlatformByName(name)
+            platform_props = props
+            break
+        except Exception:
+            continue
+    if platform.getName() == "CPU":
+        warnings.warn("Falling back to CPU platform. This will be slower.", RuntimeWarning)
+    sim = Simulation(topology, system, integ, platform, platform_props)
+    sim.context.setPositions(positions)
+    
+    ref_positions = sim.context.getState(getPositions=True).getPositions(asNumpy=True)
+    for _ in range(500):
+        sim.step(10)
+    heavy_idxs = reset_nonH_nonOXT_positions(sim, ref_positions)
+    
+    state = sim.context.getState(getEnergy=True, getForces=True)
+    
+    forces = state.getForces(asNumpy=True)[heavy_idxs] 
+
+    energy = state.getPotentialEnergy()
+
+    return energy.value_in_unit(kilojoules_per_mole), -1 * forces

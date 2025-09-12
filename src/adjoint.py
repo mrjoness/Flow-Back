@@ -30,7 +30,8 @@ def stochastic_trajectory(v_finetune, sigma_t, **kwargs):
     charmm_ff = kwargs.get('charmm_ff', 'auto')
     energy_funcs = {
         'RDKit': rdkit_traj_to_energy,
-        'CHARMM': lambda topology, xyz: charmm_traj_to_energy(topology, xyz, ff_version=charmm_ff)
+        'CHARMM': lambda topology, xyz: charmm_traj_to_energy(topology, xyz, ff_version=charmm_ff),
+        'amber-solv': amber_solv_traj_to_energy
     }
     energy_func = energy_funcs[kwargs.get('ff')]
     
@@ -148,9 +149,12 @@ def trajectory_and_adjoint(v_base, v_finetune,  **kwargs):
     cg_noise = kwargs.get('cg_noise')
     batch_size = kwargs.get('batch_size')
     num_steps = kwargs.get('num_steps')
+    job_dir = kwargs.get('job_dir')
     device = kwargs.get('device')
     sigma_all = sigma(torch.linspace(0, 1, num_steps + 1), 1 / num_steps, cg_noise)
     xyz, energy, gradients = stochastic_trajectory(v_finetune, sigma_all, **kwargs)
+    with open(f'{job_dir}/energies.out', 'w') as f:
+        f.write(str(energy) + '\n')
     traj = xyz.view(batch_size, num_steps+1, n_coords, 3)
     a_t = lean_adjoint_ode(traj, v_base, gradients, **kwargs)
     ### Timestep selection
