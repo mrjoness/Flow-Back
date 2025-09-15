@@ -226,7 +226,7 @@ class PostTrainModule(pl.LightningModule):
                     step_list = [select_steps]
                     sigma_list = [sigma_select]
 
-                loss_total = torch.tensor(0.0, device=self.device)
+                loss_total = torch.tensor(0.0, device=self.device, requires_grad=True)
                 for steps, sigmas in zip(step_list, sigma_list):
                     loss_total = loss_total + adjoint_matching_loss(
                         traj,
@@ -239,7 +239,7 @@ class PostTrainModule(pl.LightningModule):
                     )
                 loss = loss_total
             except Exception:
-                loss = torch.tensor(0.0, device=self.device)
+                loss = torch.tensor(0.0, device=self.device, requires_grad=True)
 
         self.losses_epoch.append(loss.detach().cpu().item())
         if (self.global_step + 1) % 100 == 0:
