@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -22,7 +22,8 @@ dependencies = [
     "matplotlib",
     "tqdm",
     "joblib",
-    "MDAnalysis==2.8.0"
+    "MDAnalysis==2.8.0",
+    "pdbfixer @ git+https://github.com/openmm/pdbfixer.git"
 ]
 
 [project.urls]
