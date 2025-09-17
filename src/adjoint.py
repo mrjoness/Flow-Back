@@ -151,16 +151,17 @@ def trajectory_and_adjoint(v_base, v_finetune,  **kwargs):
     num_steps = kwargs.get('num_steps')
     job_dir = kwargs.get('job_dir')
     device = kwargs.get('device')
+    compare = kwargs.get('compare')
     sigma_all = sigma(torch.linspace(0, 1, num_steps + 1), 1 / num_steps, cg_noise)
     xyz, energy, gradients = stochastic_trajectory(v_finetune, sigma_all, **kwargs)
-    with open(f'{job_dir}/energies.out', 'w') as f:
-        f.write(str(energy) + '\n')
-    traj = xyz.view(batch_size, num_steps+1, n_coords, 3)
-    a_t = lean_adjoint_ode(traj, v_base, gradients, **kwargs)
-    ### Timestep selection
-    
-
-    return traj, a_t
+    if compare:
+        return energy
+    else:
+        traj = xyz.view(batch_size, num_steps+1, n_coords, 3)
+        with open(f'{job_dir}/energies.out', 'a') as f:
+            f.write(str(energy) + '\n')
+        a_t = lean_adjoint_ode(traj, v_base, gradients, **kwargs)
+        return traj, a_t
 
 
     

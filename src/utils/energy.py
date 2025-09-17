@@ -93,7 +93,7 @@ def charmm_structure_to_energy(topology: md.Topology, xyz: np.ndarray, nonbonded
         if process.returncode != 0:
             print(f"Energy calculation failed at pdb2gmx step. Error:\n{stderr}")
             return np.zeros_like(xyz)
-        index_map = _map_original_to_processed_indices(pdb_file, structure_file)
+        index_map = map_original_to_processed_indices(pdb_file, structure_file)
         gro = GromacsGroFile(structure_file)
         original_box = gro.getPeriodicBoxVectors()
         expanded_box = (
@@ -235,20 +235,19 @@ def amber_solv_traj_to_energy(topology: md.Topology, xyz: np.ndarray):
 def amber_solv_structure_to_energy(topology: md.Topology, xyz: np.ndarray):
     t = md.Trajectory(xyz, topology)
     
+
     with tempfile.TemporaryDirectory() as temp_dir:
-        t.save_pdb(f'{temp_dir}/temp.pdb')
-        pdb_file = PDBFile(f'{temp_dir}/temp.pdb')
+        pdb_file = f'{temp_dir}/temp.pdb'
+        t.save_pdb(pdb_file)
     # --- AMBER14 with implicit solvent (GBn2) ---
-    ff = ForceField("amber14-all.xml", "implicit/gbn2.xml")
-    fixer = PDBFixer(filename=pdb_file)
+        fixer = PDBFixer(filename=pdb_file)
     fixer.findMissingResidues()
     fixer.findNonstandardResidues()
     fixer.replaceNonstandardResidues()
     
     # ---- Example usage ----
     # Build OpenMM objects from the fixed structure
-    topology  = fixer.topology
-    positions = fixer.positions
+    
     
     # Snapshot BEFORE adding atoms
     fixer.findMissingAtoms()
@@ -259,21 +258,19 @@ def amber_solv_structure_to_energy(topology: md.Topology, xyz: np.ndarray):
     # Snapshot AFTER addMissingAtoms, BEFORE hydrogens
     ctr1, idx_after_atoms = counter_from_topology(fixer.topology)
     added_heavy, added_heavy_idxs = diff_added_atoms(ctr0, ctr1, idx_after_atoms)
-    
-    fixer.addMissingHydrogens(pH=7.0)
-    
+    ff = ForceField("amber14-all.xml", "implicit/gbn2.xml")
+    fixer.addMissingHydrogens(pH=7.0, forcefield=ff)
+    topology  = fixer.topology
+    positions = fixer.positions
     # Snapshot AFTER hydrogens
     ctr2, idx_after_H = counter_from_topology(fixer.topology)
     added_h, added_h_idxs = diff_added_atoms(ctr1, ctr2, idx_after_H)
     # Define the output PDB filename
-    # output_pdb_file = 'structure.pdb'
-    
-    # Write the PDB file
-    # PDBFile.writeFile(fixer.topology, fixer.positions, open(output_pdb_file, 'w'))
+
     
     # print(f"\nAdded {len(added_h)} hydrogens:")
     system = ff.createSystem(
-        topology,
+        fixer.topology,
         nonbondedMethod=NoCutoff,   # implicit solvent: NoCutoff / CutoffNonPeriodic / CutoffPeriodic only
         constraints=HBonds
     )
@@ -317,11 +314,12 @@ def amber_solv_structure_to_energy(topology: md.Topology, xyz: np.ndarray):
     for _ in range(500):
         sim.step(10)
     heavy_idxs = reset_nonH_nonOXT_positions(sim, ref_positions)
-    
+
     state = sim.context.getState(getEnergy=True, getForces=True)
     
-    forces = state.getForces(asNumpy=True)[heavy_idxs] 
+    forces = state.getForces(asNumpy=True)
+    heavy_forces = forces[heavy_idxs, :] 
 
     energy = state.getPotentialEnergy()
 
-    return energy.value_in_unit(kilojoules_per_mole), -1 * forces
+    return energy.value_in_unit(kilojoules_per_mole), -1 * heavy_forces

@@ -114,7 +114,7 @@ def ensure_charmm_ff(version: str = 'auto') -> Path:
     (dest / "merged.c.tdb").write_text(c_block_text)
     return dest
 
-def _map_original_to_processed_indices(original_pdb, processed_pdb):
+def map_original_to_processed_indices(original_pdb, processed_pdb):
     orig_u = mda.Universe(original_pdb)
     proc_u = mda.Universe(processed_pdb)
     index_map = -1 * np.ones(len(orig_u.atoms), dtype=int)
@@ -217,13 +217,13 @@ def reset_nonH_nonOXT_positions(sim: Simulation, ref_positions):
     # Get current positions from simulation
     state = sim.context.getState(getPositions=True)
     pos = state.getPositions(asNumpy=True)  # Quantity in nm
-    heavy_idxs = np.ones(sim.topology.getNumAtoms())
+    heavy_idxs = np.zeros(sim.topology.getNumAtoms(), dtype=bool)
 
     # Loop over topology atoms and reset conditionally
     for atom in sim.topology.atoms():
         if atom.element.symbol != "H" and atom.name != "OXT":
             pos[atom.index] = ref_positions[atom.index]
-            heavy_idxs[atom.index] = 0
+            heavy_idxs[atom.index] = 1
 
     # Write updated positions back
     sim.context.setPositions(pos)
