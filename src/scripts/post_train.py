@@ -23,7 +23,7 @@ from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
 
 from src.file_config import FLOWBACK_BASE, FLOWBACK_DATA, FLOWBACK_JOBDIR
-from src.utils.energy import ensure_charmm_ff
+from src.utils.energy_helpers import ensure_charmm_ff
 from src.adjoint import (
     adjoint_matching_loss,
     sigma,
@@ -45,7 +45,7 @@ def setup_args(parser: ArgumentParser) -> ArgumentParser:
     parser.add_argument(
         "--config",
         type=str,
-        default=f"{FLOWBACK_BASE}/configs/pt_config.yaml",
+        default=f"{FLOWBACK_BASE}/configs/post_train.yaml",
         help="Path to config file",
     )
     parser.add_argument("--test", action="store_true", help="For testing purposes")
@@ -124,6 +124,7 @@ class PostTrainModule(pl.LightningModule):
         selection_split: float,
         compare: bool = False,
         test: bool = False,
+        agb: int = 16
     ) -> None:
         super().__init__()
         self.model = deepcopy(base_model)
@@ -147,6 +148,7 @@ class PostTrainModule(pl.LightningModule):
         self.test = test
         self.losses_epoch: list[float] = []
         self.all_losses: list[float] = []
+        self.agb = agb
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(
@@ -179,7 +181,6 @@ class PostTrainModule(pl.LightningModule):
             atom_feats=atom_feats,
             ca_pos=ca_pos,
         )
-
         kwargs = {
             "job_dir": self.job_dir,
             "topology": topology,
@@ -195,14 +196,54 @@ class PostTrainModule(pl.LightningModule):
             "int_ff": self.int_ff,
             "max_grad": self.max_grad,
             "t_flip": self.t_flip,
+            "compare": self.compare
         }
 
         if self.compare:
             try:
-                trajectory_and_adjoint(model_wrpd, model_ft_wrpd, **kwargs)
+                energy = trajectory_and_adjoint(model_wrpd, model_ft_wrpd, **kwargs)
+                _ = _select_timesteps(
+                    self.num_steps, self.selection_split
+                ).to(self.device)
+                with open(f'{self.job_dir}/energies_compare.out', 'a') as f:
+                    f.write(str(energy) + '\n') 
             except Exception:
                 pass
-            loss = torch.tensor(0.0, device=self.device)
+            loss = torch.tensor(0.0, device=self.device, requires_grad=True)
+        elif self.test:
+            traj, a_t = trajectory_and_adjoint(
+                model_wrpd, model_ft_wrpd, **kwargs
+            )
+            select_steps = _select_timesteps(
+                self.num_steps, self.selection_split
+            ).to(self.device)
+            sigma_select = sigma(
+                select_steps / self.num_steps, 1 / self.num_steps, self.cg_noise
+            )
+            max_steps = atom_to_steps(res_feats.shape[1])
+            if max_steps < 30:
+                step_list = split_list(
+                    select_steps, int(np.ceil(len(select_steps) / max_steps))
+                )
+                sigma_list = split_list(
+                    sigma_select, int(np.ceil(len(select_steps) / max_steps))
+                )
+            else:
+                step_list = [select_steps]
+                sigma_list = [sigma_select]
+
+            loss_total = torch.tensor(0.0, device=self.device)
+            for steps, sigmas in zip(step_list, sigma_list):
+                loss_total = loss_total + adjoint_matching_loss(
+                    traj,
+                    model_ft_wrpd,
+                    model_wrpd,
+                    a_t,
+                    steps,
+                    sigmas,
+                    **kwargs,
+                )
+            loss = loss_total
         else:
             try:
                 traj, a_t = trajectory_and_adjoint(
@@ -225,7 +266,7 @@ class PostTrainModule(pl.LightningModule):
                 else:
                     step_list = [select_steps]
                     sigma_list = [sigma_select]
-
+    
                 loss_total = torch.tensor(0.0, device=self.device)
                 for steps, sigmas in zip(step_list, sigma_list):
                     loss_total = loss_total + adjoint_matching_loss(
@@ -239,16 +280,16 @@ class PostTrainModule(pl.LightningModule):
                     )
                 loss = loss_total
             except Exception:
-                loss = torch.tensor(0.0, device=self.device)
+                loss = torch.tensor(0.0, device=self.device, requires_grad=True)
 
         self.losses_epoch.append(loss.detach().cpu().item())
-        if (self.global_step + 1) % 100 == 0:
+        if (self.global_step + 1) % 10 == 0 and not self.compare and not self.test:
             torch.save(
                 self.model.state_dict(),
-                f"{self.job_dir}/state-{self.global_step}.pth",
+                f"{self.job_dir}/state-{self.global_step + 1}.pth",
             )
             np.save(
-                f"{self.job_dir}/losses-epoch-{self.current_epoch}-step-{self.global_step}.npy",
+                f"{self.job_dir}/losses-epoch-{self.current_epoch}-step-{self.global_step + 1}.npy",
                 np.array(self.all_losses + [np.mean(self.losses_epoch)]),
             )
 
@@ -319,7 +360,7 @@ if __name__ == "__main__":
 
     shutil.copyfile(config_yaml, f"{job_dir}/config.yaml")
 
-    ff = "CHARMM" if getattr(config_args, "ff", "RDKit") == "CHARMM" else "RDKit"
+    ff = getattr(config_args, "ff", "RDKit")
     int_ff = getattr(config_args, "int_ff", False)
     if ff == 'CHARMM':
         ensure_charmm_ff(charmm_ff)
@@ -365,7 +406,6 @@ if __name__ == "__main__":
         drop_last=True,
         collate_fn=posttrain_collate,
     )
-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     base_model = load_model(model_path, ckp, device)
     base_model.eval()
@@ -387,8 +427,8 @@ if __name__ == "__main__":
         selection_split=selection_split,
         compare=args.compare,
         test=args.test,
+        agb=acc_grad_batch
     )
-
     if restart:
         module.model.load_state_dict(
             torch.load(f"{job_dir}/state-{config_args.restart_ckp}.pth")
